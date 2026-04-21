@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: img-crm-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: img
+      POSTGRES_PASSWORD: img
+      POSTGRES_DB: img_crm
+    ports:
+      - "5432:5432"
+    volumes:
+      - img-crm-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U img -d img_crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: img-crm-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: img
+      MINIO_ROOT_PASSWORD: imgimgimg
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - img-crm-minio:/data
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: img-crm-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  img-crm-db:
+  img-crm-minio:

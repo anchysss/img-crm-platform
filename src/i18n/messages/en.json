@@ -1,0 +1,20 @@
+{
+  "app.title": "IMG CRM",
+  "nav.dashboard": "Today",
+  "nav.pipeline": "Pipeline",
+  "nav.opportunities": "Opportunities",
+  "nav.partners": "Partners",
+  "nav.mediabook": "MediaBook",
+  "nav.campaigns": "Campaigns",
+  "nav.invoices": "Invoices",
+  "nav.reports": "Reports",
+  "nav.admin": "Admin",
+  "dashboard.kpi.openCount": "Open opportunities",
+  "dashboard.kpi.weightedPipeline": "Weighted pipeline",
+  "dashboard.kpi.forecastMonth": "Forecast this month",
+  "dashboard.kpi.winRate": "Win rate (90d)",
+  "dashboard.kpi.closedWonMonth": "Closed won this month",
+  "common.loading": "Loading...",
+  "common.save": "Save",
+  "common.cancel": "Cancel"
+}

@@ -1,0 +1,744 @@
+// IMG CRM Platform — Prisma schema
+// Sve domenske tabele imaju pravnoLiceId (ADR-0002) + createdAt/updatedAt/deletedAt? + createdBy/updatedBy.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================
+// Tenancy & Auth
+// =============================================================
+
+model PravnoLice {
+  id            String   @id @default(cuid())
+  kod           String   @unique // MNE | SRB | HRV | BIH
+  naziv         String
+  zemlja        String // ISO 3166-1 alpha-2
+  valuta        String // ISO 4217
+  pib           String
+  tz            String   @default("Europe/Podgorica")
+  jezik         String   @default("sr-Latn")
+  sablonFakture String   @default("default") // identifikator šablona
+  stopaPdv      Decimal  @default("0") @db.Decimal(5, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  korisnici      KorisnikRola[]
+  partneri       Partner[]
+  opportunities  Opportunity[]
+  kampanje       Kampanja[]
+  vozila         Vozilo[]
+  dokumenti      Dokument[]
+  numeracija     NumeracijaSkok[]
+  handoffBatches HandoffBatch[]
+  auditLog       AuditLog[]
+  notifikacije   Notifikacija[]
+}
+
+model Korisnik {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String
+  ime             String
+  prezime         String
+  aktivan         Boolean   @default(true)
+  twoFaSecret     String? // TOTP secret; null dok nije podešen
+  twoFaEnabled    Boolean   @default(false)
+  lastLoginAt     DateTime?
+  failedLoginAttempts Int   @default(0)
+  lockedUntil     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  roles         KorisnikRola[]
+  vlasnikOpp    Opportunity[]     @relation("OpportunityVlasnik")
+  aktivnosti    Aktivnost[]
+  auditLog      AuditLog[]
+  notifikacije  Notifikacija[]
+  sessions      Session[]
+  piiAccess     LicniPodatakPristup[]
+
+  @@index([email])
+  @@index([aktivan])
+}
+
+model Rola {
+  id       String  @id @default(cuid())
+  kod      RolaKod @unique // fiksan enum; PZ 4.2 (strogi FK, nema slobodnog teksta)
+  naziv    String
+  opis     String?
+
+  dozvole  Dozvola[]
+  korisniciRole KorisnikRola[]
+}
+
+enum RolaKod {
+  ADMIN
+  COUNTRY_MANAGER
+  SALES_MANAGER
+  SALES_REP
+  FINANCE
+  READ_ONLY
+}
+
+model KorisnikRola {
+  id            String @id @default(cuid())
+  korisnikId    String
+  rolaId        String
+  pravnoLiceId  String
+
+  korisnik    Korisnik   @relation(fields: [korisnikId], references: [id], onDelete: Cascade)
+  rola        Rola       @relation(fields: [rolaId], references: [id])
+  pravnoLice  PravnoLice @relation(fields: [pravnoLiceId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([korisnikId, rolaId, pravnoLiceId])
+  @@index([korisnikId])
+  @@index([pravnoLiceId])
+}
+
+model Dozvola {
+  id     String @id @default(cuid())
+  rolaId String
+  modul  String // npr. "partners", "opportunities", ...
+  akcija AkcijaDozvole
+
+  rola Rola @relation(fields: [rolaId], references: [id], onDelete: Cascade)
+
+  @@unique([rolaId, modul, akcija])
+  @@index([modul, akcija])
+}
+
+enum AkcijaDozvole {
+  READ
+  CREATE
+  UPDATE
+  DELETE
+  EXPORT
+  APPROVE
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  korisnikId   String
+  token        String   @unique
+  ip           String?
+  userAgent    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+
+  korisnik Korisnik @relation(fields: [korisnikId], references: [id], onDelete: Cascade)
+
+  @@index([korisnikId])
+  @@index([expiresAt])
+}
+
+// =============================================================
+// Komercijalni
+// =============================================================
+
+model Partner {
+  id            String     @id @default(cuid())
+  pravnoLiceId  String
+  naziv         String
+  tip           PartnerTip
+  segment       Segment    @default(C)
+  status        PartnerStatus @default(AKTIVAN)
+  maticniBroj   String?
+  pibVat        String?
+  zemlja        String
+  adresa        String?
+  grad          String?
+  napomene      String?
+  vlasnikId     String? // Sales Rep
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+  createdBy     String?
+  updatedBy     String?
+
+  pravnoLice    PravnoLice @relation(fields: [pravnoLiceId], references: [id])
+  kontakti      Kontakt[]
+  opportunities Opportunity[]
+  kampanje      Kampanja[]
+  dokumenti     Dokument[]
+  aktivnosti    Aktivnost[]
+
+  @@index([pravnoLiceId])
+  @@index([tip])
+  @@index([segment])
+  @@index([vlasnikId])
+}
+
+enum PartnerTip {
+  DIRECT
+  AGENCY
+  RESELLER
+  PROVIDER
+}
+
+enum Segment {
+  A
+  B
+  C
+}
+
+enum PartnerStatus {
+  AKTIVAN
+  NEAKTIVAN
+  BLOKIRAN
+}
+
+model Kontakt {
+  id          String   @id @default(cuid())
+  partnerId   String
+  ime         String
+  pozicija    String?
+  email       String?
+  telefon     String?
+  primarni    Boolean  @default(false)
+  legalBasis  LegalBasis @default(LEGITIMATE_INTEREST)
+  izvor       String?
+  pseudonimizovan Boolean @default(false)
+  pseudonimizovanAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  partner     Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  aktivnosti  Aktivnost[]
+
+  @@index([partnerId])
+  @@index([email])
+}
+
+enum LegalBasis {
+  CONSENT
+  CONTRACT
+  LEGITIMATE_INTEREST
+  LEGAL_OBLIGATION
+}
+
+model Aktivnost {
+  id           String   @id @default(cuid())
+  partnerId    String?
+  kontaktId    String?
+  opportunityId String?
+  tip          AktivnostTip
+  datum        DateTime
+  opis         String
+  ishod        String?
+  autorId      String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  partner      Partner?     @relation(fields: [partnerId], references: [id])
+  kontakt      Kontakt?     @relation(fields: [kontaktId], references: [id])
+  opportunity  Opportunity? @relation(fields: [opportunityId], references: [id])
+  autor        Korisnik     @relation(fields: [autorId], references: [id])
+
+  @@index([partnerId])
+  @@index([opportunityId])
+  @@index([autorId, datum])
+}
+
+enum AktivnostTip {
+  POZIV
+  SASTANAK
+  MAIL
+  PONUDA
+  POSETA
+  OSTALO
+}
+
+// =============================================================
+// Pipeline
+// =============================================================
+
+model Opportunity {
+  id              String       @id @default(cuid())
+  pravnoLiceId    String
+  naziv           String
+  partnerId       String
+  kontaktId       String?
+  vlasnikId       String
+  stageId         String
+  probability     Int // override; default iz Stage
+  izvor           OppIzvor     @default(OUTBOUND)
+  valuta          String
+  expValue        Decimal      @db.Decimal(12, 2)
+  expCloseDate    DateTime
+  lostReasonId    String?
+  lostReasonText  String? // samo za LOST kada je razlog OSTALO
+  tags            String[]
+  opis            String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  closedAt        DateTime?
+  deletedAt       DateTime?
+
+  pravnoLice  PravnoLice  @relation(fields: [pravnoLiceId], references: [id])
+  partner     Partner     @relation(fields: [partnerId], references: [id])
+  vlasnik     Korisnik    @relation("OpportunityVlasnik", fields: [vlasnikId], references: [id])
+  stage       Stage       @relation(fields: [stageId], references: [id])
+  lostReason  LostReason? @relation(fields: [lostReasonId], references: [id])
+  aktivnosti  Aktivnost[]
+  kampanja    Kampanja?
+  rezervacije Rezervacija[]
+
+  @@index([pravnoLiceId, stageId])
+  @@index([vlasnikId])
+  @@index([expCloseDate])
+}
+
+enum OppIzvor {
+  INBOUND
+  OUTBOUND
+  REFERRAL
+  EXISTING_CLIENT
+  AGENCY
+}
+
+model Stage {
+  id                 String   @id @default(cuid())
+  kod                StageKod @unique
+  naziv              String
+  defaultProbability Int
+  redosled           Int
+  aktivan            Boolean  @default(true)
+
+  opportunities Opportunity[]
+}
+
+enum StageKod {
+  NEW
+  QUALIFIED
+  PROPOSAL_SENT
+  NEGOTIATION
+  VERBALLY_CONFIRMED
+  WON
+  LOST
+}
+
+model LostReason {
+  id       String         @id @default(cuid())
+  kod      LostReasonKod  @unique
+  naziv    String
+  aktivan  Boolean        @default(true)
+
+  opportunities Opportunity[]
+}
+
+enum LostReasonKod {
+  CENA
+  KONKURENCIJA
+  TIMING
+  BEZ_ODLUKE
+  DUPLIKAT
+  OSTALO
+}
+
+// =============================================================
+// Inventar
+// =============================================================
+
+model Vozilo {
+  id            String    @id @default(cuid())
+  pravnoLiceId  String
+  registracija  String
+  tip           VoziloTip
+  agencijaVlasnikId String?
+  zemlja        String
+  grad          String
+  slikaUrl      String?
+  status        VoziloStatus @default(AKTIVNO)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  pravnoLice       PravnoLice        @relation(fields: [pravnoLiceId], references: [id])
+  pozicije         Pozicija[]
+  komunalneNaknade KomunalnaNaknada[]
+
+  @@unique([pravnoLiceId, registracija])
+  @@index([grad])
+}
+
+enum VoziloTip {
+  BUS
+  MINI
+  DRUGO
+}
+
+enum VoziloStatus {
+  AKTIVNO
+  SERVIS
+  POVUCENO
+}
+
+model Pozicija {
+  id             String      @id @default(cuid())
+  voziloId       String
+  tip            PozicijaTip
+  dimenzije      String?
+  minPeriodDana  Int         @default(7)
+  cenaPoPeriodu  Decimal     @db.Decimal(10, 2)
+  valuta         String
+
+  vozilo         Vozilo        @relation(fields: [voziloId], references: [id], onDelete: Cascade)
+  rezervacije    Rezervacija[]
+  kampanjaStavke KampanjaStavka[]
+
+  @@index([voziloId])
+}
+
+enum PozicijaTip {
+  CELO_VOZILO
+  ZADNJI_DEO
+  BOK_LEVO
+  BOK_DESNO
+  UNUTRA
+  DRUGO
+}
+
+model Rezervacija {
+  id            String         @id @default(cuid())
+  pozicijaId    String
+  opportunityId String? // kada je HOLD
+  kampanjaId    String? // kada je CONFIRMED/RUNNING
+  status        RezervacijaStatus
+  odDatum       DateTime
+  doDatum       DateTime
+  holdIstice    DateTime? // samo za HOLD
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  pozicija    Pozicija     @relation(fields: [pozicijaId], references: [id])
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  kampanja    Kampanja?    @relation(fields: [kampanjaId], references: [id])
+
+  @@index([pozicijaId, odDatum, doDatum])
+  @@index([status])
+}
+
+enum RezervacijaStatus {
+  HOLD
+  CONFIRMED
+  RUNNING
+  CANCELLED
+  RELEASED
+}
+
+model KomunalnaNaknada {
+  id           String   @id @default(cuid())
+  voziloId     String
+  odDatum      DateTime
+  doDatum      DateTime
+  iznos        Decimal  @db.Decimal(10, 2)
+  valuta       String
+  statusPlacanja StatusPlacanja @default(NEPLACENO)
+  napomena     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  vozilo Vozilo @relation(fields: [voziloId], references: [id])
+
+  @@index([voziloId])
+  @@index([doDatum])
+}
+
+enum StatusPlacanja {
+  NEPLACENO
+  DELIMICNO
+  PLACENO
+}
+
+// =============================================================
+// Operativno: kampanje + stavke
+// =============================================================
+
+model Kampanja {
+  id            String        @id @default(cuid())
+  pravnoLiceId  String
+  opportunityId String?       @unique
+  partnerId     String
+  naziv         String
+  odDatum       DateTime
+  doDatum       DateTime
+  status        KampanjaStatus @default(POTVRDENA)
+  valuta        String
+  kreativaUrl   String?
+  napomene      String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  pravnoLice  PravnoLice  @relation(fields: [pravnoLiceId], references: [id])
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  partner     Partner     @relation(fields: [partnerId], references: [id])
+  stavke      KampanjaStavka[]
+  rezervacije Rezervacija[]
+  dokumenti   Dokument[]
+
+  @@index([pravnoLiceId, status])
+  @@index([partnerId])
+}
+
+enum KampanjaStatus {
+  POTVRDENA
+  U_REALIZACIJI
+  ZAVRSENA
+  OTKAZANA
+}
+
+model KampanjaStavka {
+  id         String   @id @default(cuid())
+  kampanjaId String
+  pozicijaId String
+  odDatum    DateTime
+  doDatum    DateTime
+  cena       Decimal  @db.Decimal(10, 2)
+  valuta     String
+
+  kampanja      Kampanja         @relation(fields: [kampanjaId], references: [id], onDelete: Cascade)
+  pozicija      Pozicija         @relation(fields: [pozicijaId], references: [id])
+  dokumentStavke DokumentStavka[]
+
+  @@index([kampanjaId])
+  @@index([pozicijaId])
+}
+
+// =============================================================
+// Finansije
+// =============================================================
+
+model Dokument {
+  id           String        @id @default(cuid())
+  pravnoLiceId String
+  tip          DokumentTip
+  broj         String
+  datum        DateTime
+  rokPlacanja  DateTime?
+  partnerId    String
+  kampanjaId   String?
+  podzbir      Decimal       @db.Decimal(12, 2)
+  pdv          Decimal       @db.Decimal(12, 2)
+  ukupno       Decimal       @db.Decimal(12, 2)
+  valuta       String
+  napomene     String?
+  status       DokumentStatus @default(OTVOREN)
+  stornoOdId   String?       @unique
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  pravnoLice PravnoLice @relation(fields: [pravnoLiceId], references: [id])
+  partner    Partner    @relation(fields: [partnerId], references: [id])
+  kampanja   Kampanja?  @relation(fields: [kampanjaId], references: [id])
+  stavke     DokumentStavka[]
+  handoffZapisi HandoffZapis[]
+  stornoOd   Dokument? @relation("DokumentStorno", fields: [stornoOdId], references: [id])
+  stornoZa   Dokument? @relation("DokumentStorno")
+
+  @@unique([pravnoLiceId, tip, broj])
+  @@index([pravnoLiceId, datum])
+  @@index([partnerId])
+}
+
+enum DokumentTip {
+  PREDRACUN
+  FAKTURA
+  AVANS
+  STORNO
+}
+
+enum DokumentStatus {
+  OTVOREN
+  PLACEN
+  DELIMICNO_PLACEN
+  STORNIRAN
+  OTKAZAN
+}
+
+model DokumentStavka {
+  id              String  @id @default(cuid())
+  dokumentId      String
+  kampanjaStavkaId String?
+  opis            String
+  kolicina        Decimal @default("1") @db.Decimal(10, 2)
+  jedinicnaCena   Decimal @db.Decimal(12, 2)
+  popust          Decimal @default("0") @db.Decimal(5, 2)
+  iznos           Decimal @db.Decimal(12, 2)
+
+  dokument      Dokument        @relation(fields: [dokumentId], references: [id], onDelete: Cascade)
+  kampanjaStavka KampanjaStavka? @relation(fields: [kampanjaStavkaId], references: [id])
+
+  @@index([dokumentId])
+}
+
+model NumeracijaSkok {
+  id           String @id @default(cuid())
+  pravnoLiceId String
+  tip          DokumentTip
+  godina       Int
+  poslednjiRbr Int    @default(0)
+
+  pravnoLice PravnoLice @relation(fields: [pravnoLiceId], references: [id])
+
+  @@unique([pravnoLiceId, tip, godina])
+}
+
+model HandoffBatch {
+  id           String       @id @default(cuid())
+  pravnoLiceId String
+  format       HandoffFormat
+  odDatum      DateTime
+  doDatum      DateTime
+  status       HandoffStatus @default(QUEUED)
+  brojZapisa   Int           @default(0)
+  odredisteUrl String?
+  error        String?
+  retryCount   Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  pravnoLice PravnoLice @relation(fields: [pravnoLiceId], references: [id])
+  zapisi     HandoffZapis[]
+
+  @@index([pravnoLiceId, status])
+}
+
+enum HandoffFormat {
+  SRB_SEF
+  MNE_STD
+  HRV_FINA
+  BIH_STD
+}
+
+enum HandoffStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+model HandoffZapis {
+  id        String @id @default(cuid())
+  batchId   String
+  dokumentId String
+  payload   Json
+
+  batch    HandoffBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  dokument Dokument     @relation(fields: [dokumentId], references: [id])
+
+  @@index([batchId])
+}
+
+// =============================================================
+// Cross-cutting
+// =============================================================
+
+model Notifikacija {
+  id           String   @id @default(cuid())
+  pravnoLiceId String
+  korisnikId   String
+  tip          NotifikacijaTip
+  poruka       String
+  linkUrl      String?
+  procitano    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  pravnoLice PravnoLice @relation(fields: [pravnoLiceId], references: [id])
+  korisnik   Korisnik   @relation(fields: [korisnikId], references: [id], onDelete: Cascade)
+
+  @@index([korisnikId, procitano])
+}
+
+enum NotifikacijaTip {
+  OPP_DODELJEN
+  FOLLOWUP_DOSPEO
+  OPP_ZAPEO
+  FORECAST_ISPOD_TARGETA
+  STARA_INTERAKCIJA
+  KAMPANJA_POTVRDENA
+  KAMPANJA_ISTEKLA
+  POZICIJA_REZERVISANA
+  POZICIJA_OTPUSTENA
+  KOMUNALNA_ISTEKLA
+  VOZILO_DODANO
+  PII_PRISTUP
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  pravnoLiceId String?
+  korisnikId   String?
+  entitet      String
+  entitetId    String
+  akcija       AuditAkcija
+  diff         Json?
+  ip           String?
+  userAgent    String?
+  timestamp    DateTime @default(now())
+
+  pravnoLice PravnoLice? @relation(fields: [pravnoLiceId], references: [id])
+  korisnik   Korisnik?   @relation(fields: [korisnikId], references: [id])
+
+  @@index([entitet, entitetId])
+  @@index([korisnikId])
+  @@index([timestamp])
+}
+
+enum AuditAkcija {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  LOGIN_FAILED
+  EXPORT
+  STAGE_CHANGE
+  HOLD_CREATE
+  HOLD_RELEASE
+  TENANT_OVERRIDE
+  GDPR_ERASURE
+  GDPR_ACCESS
+  PERMISSION_CHANGE
+  INVOICE_GENERATE
+  HANDOFF_BATCH
+}
+
+model LicniPodatakPristup {
+  id          String   @id @default(cuid())
+  korisnikId  String
+  subjektTip  String // "Kontakt", "Partner", ...
+  subjektId   String
+  svrha       String
+  timestamp   DateTime @default(now())
+
+  korisnik Korisnik @relation(fields: [korisnikId], references: [id])
+
+  @@index([subjektTip, subjektId])
+  @@index([korisnikId])
+}
+
+// =============================================================
+// Sačuvani filteri (pipeline)
+// =============================================================
+
+model SacuvaniFilter {
+  id         String @id @default(cuid())
+  korisnikId String
+  naziv      String
+  modul      String // "pipeline" | "partners" | ...
+  filterJson Json
+
+  @@index([korisnikId, modul])
+}
