@@ -30,6 +30,25 @@ export const invoicesRouter = router({
     });
   }),
 
+  byId: withPermission("invoices", "READ").input(z.object({ id: z.string().cuid() })).query(async ({ ctx, input }) => {
+    const d = await prisma.dokument.findUnique({
+      where: { id: input.id },
+      include: { partner: true, stavke: true, kampanja: true, pravnoLice: true },
+    });
+    if (!d) return null;
+    ensureTenant(ctx.session!, d.pravnoLiceId);
+    return d;
+  }),
+
+  markPaid: withPermission("invoices", "UPDATE").input(z.object({ id: z.string().cuid(), status: z.nativeEnum(DokumentStatus) })).mutation(async ({ input, ctx }) => {
+    const d = await prisma.dokument.findUnique({ where: { id: input.id } });
+    if (!d) throw new AppError("NOT_FOUND", "Dokument ne postoji");
+    ensureTenant(ctx.session!, d.pravnoLiceId);
+    const updated = await prisma.dokument.update({ where: { id: input.id }, data: { status: input.status } });
+    await audit({ ctx: ctx.session, entitet: "Dokument", entitetId: input.id, akcija: "UPDATE", diff: { status: input.status } });
+    return updated;
+  }),
+
   create: withPermission("invoices", "CREATE").input(
     z.object({
       tip: z.nativeEnum(DokumentTip),

@@ -1,0 +1,32 @@
+name: Security
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * 1" # Ponedeljak 04:00 UTC
+
+jobs:
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Audit
+        run: npm audit --audit-level=high || true
+      - name: Fail on high/critical
+        run: |
+          HIGH=$(npm audit --json 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);console.log((j.metadata?.vulnerabilities?.high||0)+(j.metadata?.vulnerabilities?.critical||0))}catch(e){console.log(0)}}")
+          echo "high+critical=$HIGH"
+          test "$HIGH" = "0"
+
+  zap-baseline:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start app
+        run: |
+          echo "NOTE: OWASP ZAP baseline scan.  Pokretati protiv staging environment-a."
+          echo "Primer: docker run -t owasp/zap2docker-stable zap-baseline.py -t https://staging.img-crm.example"

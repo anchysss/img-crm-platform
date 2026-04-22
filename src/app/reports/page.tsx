@@ -5,7 +5,7 @@ import { trpc } from "@/lib/trpc-client";
 import { Button } from "@/components/ui/button";
 import { Input, Field } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
-import { downloadCsv } from "@/lib/export";
+import { downloadCsv, downloadXlsx } from "@/lib/export";
 
 export default function ReportsPage() {
   const funnel = trpc.pipeline.funnel.useQuery();
@@ -27,7 +27,8 @@ export default function ReportsPage() {
 
       <Report
         title="Pipeline funnel"
-        onExport={() => funnel.data && downloadCsv("funnel.csv", funnel.data.map((r) => ({ stage: r.kod, broj: r.count, weighted: r.weightedValue.toFixed(2) })))}
+        onExportCsv={() => funnel.data && downloadCsv("funnel.csv", funnel.data.map((r) => ({ stage: r.kod, broj: r.count, weighted: r.weightedValue.toFixed(2) })))}
+        onExportXlsx={() => funnel.data && downloadXlsx("funnel.xlsx", "Pipeline funnel", funnel.data.map((r) => ({ stage: r.kod, broj: r.count, weighted: Number(r.weightedValue.toFixed(2)) })))}
       >
         {funnel.data && (
           <table className="w-full text-sm">
@@ -47,7 +48,8 @@ export default function ReportsPage() {
 
       <Report
         title="Win rate i ishodi"
-        onExport={() => winRate.data && downloadCsv("win-rate.csv", [{ ukupno: winRate.data.total, won: winRate.data.won, lost: winRate.data.lost, winRate: winRate.data.winRate }])}
+        onExportCsv={() => winRate.data && downloadCsv("win-rate.csv", [{ ukupno: winRate.data.total, won: winRate.data.won, lost: winRate.data.lost, winRate: winRate.data.winRate }])}
+        onExportXlsx={() => winRate.data && downloadXlsx("win-rate.xlsx", "Win rate", [{ ukupno: winRate.data.total, won: winRate.data.won, lost: winRate.data.lost, winRate: winRate.data.winRate }])}
       >
         {winRate.data && (
           <>
@@ -71,7 +73,8 @@ export default function ReportsPage() {
 
       <Report
         title="Top 10 klijenata (po prometu)"
-        onExport={() => topPartners.data && downloadCsv("top-partners.csv", topPartners.data)}
+        onExportCsv={() => topPartners.data && downloadCsv("top-partners.csv", topPartners.data)}
+        onExportXlsx={() => topPartners.data && downloadXlsx("top-partners.xlsx", "Top 10", topPartners.data)}
       >
         {topPartners.data && (
           <table className="w-full text-sm">
@@ -90,7 +93,8 @@ export default function ReportsPage() {
 
       <Report
         title="Neplaćena potraživanja (aging)"
-        onExport={() => aging.data && downloadCsv("aging.csv", [aging.data])}
+        onExportCsv={() => aging.data && downloadCsv("aging.csv", [aging.data])}
+        onExportXlsx={() => aging.data && downloadXlsx("aging.xlsx", "Aging", [aging.data])}
       >
         {aging.data && (
           <div className="grid grid-cols-4 gap-3">
@@ -103,7 +107,8 @@ export default function ReportsPage() {
 
       <Report
         title="Utilizacija inventara"
-        onExport={() => utilization.data && downloadCsv("utilization.csv", [utilization.data])}
+        onExportCsv={() => utilization.data && downloadCsv("utilization.csv", [utilization.data])}
+        onExportXlsx={() => utilization.data && downloadXlsx("utilization.xlsx", "Utilization", [utilization.data])}
       >
         <div className="mb-3 flex gap-3">
           <Field label="Od"><Input type="date" value={util.from} onChange={(e) => setUtil({ ...util, from: e.target.value })} /></Field>
@@ -121,12 +126,15 @@ export default function ReportsPage() {
   );
 }
 
-function Report({ title, onExport, children }: { title: string; onExport: () => void; children: React.ReactNode }) {
+function Report({ title, onExportCsv, onExportXlsx, children }: { title: string; onExportCsv: () => void; onExportXlsx: () => void; children: React.ReactNode }) {
   return (
     <section className="rounded-md border">
       <div className="flex items-center justify-between border-b p-3">
         <h2 className="font-semibold">{title}</h2>
-        <Button size="sm" variant="outline" onClick={onExport}>CSV export</Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={onExportCsv}>CSV</Button>
+          <Button size="sm" variant="outline" onClick={onExportXlsx}>XLSX</Button>
+        </div>
       </div>
       <div className="p-3">{children}</div>
     </section>

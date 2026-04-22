@@ -48,7 +48,7 @@ export default function InvoicesPage() {
             <tbody>
               {(data ?? []).map((d: any) => (
                 <tr key={d.id} className="border-t">
-                  <td className="px-3 py-2 font-mono">{d.broj}</td>
+                  <td className="px-3 py-2 font-mono"><Link href={`/invoices/${d.id}`} className="hover:underline">{d.broj}</Link></td>
                   <td className="px-3 py-2"><Badge>{d.tip}</Badge></td>
                   <td className="px-3 py-2">{d.partner?.naziv}</td>
                   <td className="px-3 py-2">{formatDate(d.datum)}</td>

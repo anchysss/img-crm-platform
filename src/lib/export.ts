@@ -1,6 +1,6 @@
 /**
- * Minimalan CSV export — PZ 4.13 traži XLSX/PDF. CSV je univerzalno
- * otvorljiv u Excel-u, PDF-u se dodaje u M11 kroz print CSS.
+ * Klijentski CSV + XLSX izvoz za Reports modul (PZ 4.13).
+ * XLSX koristi ExcelJS dinamički import (lazy, ne ulazi u initial bundle).
  */
 export function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
   if (rows.length === 0) {
@@ -13,8 +13,27 @@ export function downloadCsv(filename: string, rows: Array<Record<string, unknown
   for (const r of rows) {
     lines.push(headers.map((h) => escapeCsv(r[h])).join(","));
   }
-  const csv = "\ufeff" + lines.join("\n"); // BOM za UTF-8 u Excel-u
+  const csv = "\ufeff" + lines.join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  triggerDownload(blob, filename);
+}
+
+export async function downloadXlsx(filename: string, sheetName: string, rows: Array<Record<string, unknown>>) {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "IMG CRM";
+  wb.created = new Date();
+  const ws = wb.addWorksheet(sheetName.slice(0, 31));
+  if (rows.length > 0) {
+    const headers = Object.keys(rows[0]);
+    ws.columns = headers.map((h) => ({ header: h, key: h, width: Math.max(12, Math.min(40, h.length + 6)) }));
+    for (const r of rows) ws.addRow(r);
+    const hdr = ws.getRow(1);
+    hdr.font = { bold: true };
+    hdr.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
+  }
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   triggerDownload(blob, filename);
 }
 

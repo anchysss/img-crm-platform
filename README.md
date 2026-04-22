@@ -72,11 +72,11 @@ Vidi CLAUDE.md (poglavlje 13) za plan rada i `docs/plans/` za detalje svakog mil
 | M4 | ✅ | Vozila + pozicije + MediaBook |
 | M5 | ✅ | Kampanje + konverzija |
 | M6 | ✅ | Dokumenti + finansijski handoff |
-| M7 | ✅ | Dashboard + KPI + izveštaji (CSV export) |
+| M7 | ✅ | Dashboard + KPI + izveštaji (CSV + XLSX export) |
 | M8 | ✅ | Multi-country izolacija |
 | M9 | ✅ | GDPR + audit log + notifikacije |
 | M10 | ✅ | i18n (6 jezika) + notifikacije cron |
-| M11 | ⏳ | Hardening + UAT (vidi `docs/plans/M11.md`) |
+| M11 | ✅ | Hardening (middleware auth + CSP, XLSX/PDF, retention cron, k6, dependabot, UAT verifier) |
 
 ## Licence
 
