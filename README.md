@@ -61,9 +61,22 @@ Vidi `docs/` za detaljnu dokumentaciju:
 
 ## Milestones
 
-Vidi CLAUDE.md (poglavlje 13) za plan rada.
+Vidi CLAUDE.md (poglavlje 13) za plan rada i `docs/plans/` za detalje svakog milestone-a.
 
-Trenutno završeno: M0 (bootstrap), M1 (Auth + RBAC foundation), osnovni modeli za M2–M10.
+| M | Status | Kratak opis |
+|---|---|---|
+| M0 | ✅ | Bootstrap (stack, docker-compose, ADR-ovi, CI) |
+| M1 | ✅ | Autentifikacija + RBAC + Admin |
+| M2 | ✅ | Partneri + kontakti + aktivnosti |
+| M3 | ✅ | Opportunity + Pipeline + Lost reason |
+| M4 | ✅ | Vozila + pozicije + MediaBook |
+| M5 | ✅ | Kampanje + konverzija |
+| M6 | ✅ | Dokumenti + finansijski handoff |
+| M7 | ✅ | Dashboard + KPI + izveštaji (CSV export) |
+| M8 | ✅ | Multi-country izolacija |
+| M9 | ✅ | GDPR + audit log + notifikacije |
+| M10 | ✅ | i18n (6 jezika) + notifikacije cron |
+| M11 | ⏳ | Hardening + UAT (vidi `docs/plans/M11.md`) |
 
 ## Licence
 

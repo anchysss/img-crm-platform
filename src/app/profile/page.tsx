@@ -24,6 +24,18 @@ export default function ProfilePage() {
         <div><strong>Ime:</strong> {me.data.ime} {me.data.prezime}</div>
         <div className="mt-2"><strong>Role:</strong> {me.data.roles.map((r: any) => `${r.rola.kod}×${r.pravnoLice.kod}`).join(", ")}</div>
       </div>
+
+      <section className="rounded-md border p-4">
+        <h2 className="mb-3 font-semibold">Jezik interfejsa</h2>
+        <div className="flex gap-2">
+          {(["sr-Latn", "sr-Cyrl", "hr", "bs", "cnr", "en"] as const).map((loc) => (
+            <Button key={loc} size="sm" variant="outline" onClick={async () => {
+              await fetch("/api/locale", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ locale: loc }) });
+              window.location.reload();
+            }}>{loc}</Button>
+          ))}
+        </div>
+      </section>
       <section className="rounded-md border p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-semibold">Dvofaktorska autentifikacija (2FA)</h2>

@@ -1,0 +1,20 @@
+{
+  "app.title": "ИМГ ЦРМ",
+  "nav.dashboard": "Данас",
+  "nav.pipeline": "Пајплајн",
+  "nav.opportunities": "Прилике",
+  "nav.partners": "Партнери",
+  "nav.mediabook": "МедијаБук",
+  "nav.campaigns": "Кампање",
+  "nav.invoices": "Фактуре",
+  "nav.reports": "Извештаји",
+  "nav.admin": "Админ",
+  "dashboard.kpi.openCount": "Отворене прилике",
+  "dashboard.kpi.weightedPipeline": "Пондерисани пајплајн",
+  "dashboard.kpi.forecastMonth": "Прогноза овог месеца",
+  "dashboard.kpi.winRate": "Win rate 90д",
+  "dashboard.kpi.closedWonMonth": "Closed Won овог месеца",
+  "common.loading": "Учитавам...",
+  "common.save": "Сачувај",
+  "common.cancel": "Откажи"
+}

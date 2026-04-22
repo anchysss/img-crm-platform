@@ -5,6 +5,7 @@ import { tenantWhere, ensureTenant } from "../tenant";
 import { audit } from "../audit";
 import { AppError } from "../errors";
 import { StageKod, LostReasonKod, OppIzvor, RezervacijaStatus } from "@prisma/client";
+import { notify } from "../services/notify";
 
 const oppInput = z.object({
   naziv: z.string().min(2).max(200),
@@ -86,6 +87,15 @@ export const opportunitiesRouter = router({
       },
     });
     await audit({ ctx: ctx.session, entitet: "Opportunity", entitetId: created.id, akcija: "CREATE", diff: input });
+    if (created.vlasnikId !== ctx.session!.korisnikId) {
+      await notify({
+        pravnoLiceId: created.pravnoLiceId,
+        korisnikId: created.vlasnikId,
+        tip: "OPP_DODELJEN",
+        poruka: `Dodeljena ti je nova prilika "${created.naziv}"`,
+        linkUrl: `/opportunities/${created.id}`,
+      });
+    }
     return created;
   }),
 
@@ -173,6 +183,13 @@ export const opportunitiesRouter = router({
         },
       });
       await audit({ ctx: ctx.session, entitet: "Kampanja", entitetId: k.id, akcija: "CREATE", diff: { fromOpportunity: opp.id } });
+      await notify({
+        pravnoLiceId: opp.pravnoLiceId,
+        korisnikId: opp.vlasnikId,
+        tip: "KAMPANJA_POTVRDENA",
+        poruka: `Kampanja "${k.naziv}" je potvrđena`,
+        linkUrl: `/campaigns/${k.id}`,
+      });
       return k;
     }),
 });

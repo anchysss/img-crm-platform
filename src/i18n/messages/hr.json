@@ -1,0 +1,20 @@
+{
+  "app.title": "IMG CRM",
+  "nav.dashboard": "Danas",
+  "nav.pipeline": "Pipeline",
+  "nav.opportunities": "Prilike",
+  "nav.partners": "Partneri",
+  "nav.mediabook": "MediaBook",
+  "nav.campaigns": "Kampanje",
+  "nav.invoices": "Računi",
+  "nav.reports": "Izvještaji",
+  "nav.admin": "Admin",
+  "dashboard.kpi.openCount": "Otvorene prilike",
+  "dashboard.kpi.weightedPipeline": "Ponderirani pipeline",
+  "dashboard.kpi.forecastMonth": "Projekcija ovog mjeseca",
+  "dashboard.kpi.winRate": "Win rate 90d",
+  "dashboard.kpi.closedWonMonth": "Closed Won ovog mjeseca",
+  "common.loading": "Učitavam...",
+  "common.save": "Spremi",
+  "common.cancel": "Odustani"
+}

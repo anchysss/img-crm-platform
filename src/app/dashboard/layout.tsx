@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/next-auth";
+import { NotificationsBadge } from "./sidebar-notifications";
 
 const NAV = [
   { href: "/dashboard", label: "Danas" },
@@ -35,9 +36,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
             <Link
               key={n.href}
               href={n.href}
-              className="rounded-md px-3 py-2 hover:bg-secondary"
+              className="flex items-center rounded-md px-3 py-2 hover:bg-secondary"
             >
               {n.label}
+              {n.href === "/notifications" && <NotificationsBadge />}
             </Link>
           ))}
         </nav>
