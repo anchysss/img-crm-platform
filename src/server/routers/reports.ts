@@ -90,4 +90,130 @@ export const reportsRouter = router({
     }
     return buckets;
   }),
+
+  // Conversion funnel: count opportunities that passed through each stage
+  conversionFunnel: withPermission("reports", "READ").query(async ({ ctx }) => {
+    const opps = await prisma.opportunity.findMany({
+      where: { ...tenantWhere(ctx.session!), deletedAt: null },
+      include: { stage: true },
+    });
+    // Trenutni stage distribution
+    const byStage: Record<string, number> = {};
+    for (const o of opps) byStage[o.stage.kod] = (byStage[o.stage.kod] ?? 0) + 1;
+    // Conversion estimates (based on current + historical won/lost)
+    const orderedStages = ["LEAD", "CONTACTED", "NEW", "QUALIFIED", "PROPOSAL_SENT", "NEGOTIATION", "VERBALLY_CONFIRMED", "WON"];
+    const cum: Record<string, number> = {};
+    for (let i = orderedStages.length - 1; i >= 0; i--) {
+      const kod = orderedStages[i];
+      cum[kod] = (byStage[kod] ?? 0) + (i < orderedStages.length - 1 ? cum[orderedStages[i + 1]] : 0);
+    }
+    const conv = {
+      leadToOffer: cum["PROPOSAL_SENT"] && cum["LEAD"] ? Math.round((cum["PROPOSAL_SENT"] / cum["LEAD"]) * 100) : 0,
+      offerToNegotiation: cum["NEGOTIATION"] && cum["PROPOSAL_SENT"] ? Math.round((cum["NEGOTIATION"] / cum["PROPOSAL_SENT"]) * 100) : 0,
+      negotiationToWon: cum["WON"] && cum["NEGOTIATION"] ? Math.round((cum["WON"] / cum["NEGOTIATION"]) * 100) : 0,
+    };
+    return { byStage, conversions: conv };
+  }),
+
+  // Time in stage — koliko dana opportunity stoji u trenutnoj fazi
+  timeInStage: withPermission("reports", "READ").query(async ({ ctx }) => {
+    const opps = await prisma.opportunity.findMany({
+      where: { ...tenantWhere(ctx.session!), deletedAt: null, closedAt: null },
+      include: { stage: true, partner: true, vlasnik: true },
+    });
+    const byStage: Record<string, { count: number; avgDani: number; overdue60: number }> = {};
+    const rows: Array<{ id: string; naziv: string; partner: string; stage: string; vlasnik: string; daniUFazi: number }> = [];
+    for (const o of opps) {
+      const dani = Math.round((Date.now() - o.stageUpdatedAt.getTime()) / 86400000);
+      const kod = o.stage.kod;
+      byStage[kod] ??= { count: 0, avgDani: 0, overdue60: 0 };
+      byStage[kod].count += 1;
+      byStage[kod].avgDani += dani;
+      if (dani > 60) byStage[kod].overdue60 += 1;
+      if (dani > 60) rows.push({ id: o.id, naziv: o.naziv, partner: o.partner.naziv, stage: kod, vlasnik: `${o.vlasnik.ime} ${o.vlasnik.prezime}`, daniUFazi: dani });
+    }
+    for (const kod of Object.keys(byStage)) {
+      byStage[kod].avgDani = byStage[kod].count > 0 ? Math.round(byStage[kod].avgDani / byStage[kod].count) : 0;
+    }
+    rows.sort((a, b) => b.daniUFazi - a.daniUFazi);
+    return { byStage, overdue: rows.slice(0, 50) };
+  }),
+
+  // Lost reason analytics — breakdown i iznos po razlogu gubitka
+  lostReasonAnalytics: withPermission("reports", "READ").query(async ({ ctx }) => {
+    const opps = await prisma.opportunity.findMany({
+      where: { ...tenantWhere(ctx.session!), stage: { kod: "LOST" } },
+      include: { lostReason: true },
+    });
+    const grouped: Record<string, { count: number; vrednost: number }> = {};
+    for (const o of opps) {
+      const key = o.lostReason?.kod ?? "NEDEFINISANO";
+      grouped[key] ??= { count: 0, vrednost: 0 };
+      grouped[key].count += 1;
+      grouped[key].vrednost += Number(o.expValue);
+    }
+    return grouped;
+  }),
+
+  // Cash flow projekcija iz PlanFakturisanja (mesečni aggregates)
+  cashFlow: withPermission("reports", "READ").query(async ({ ctx }) => {
+    const planovi = await prisma.planFakturisanja.findMany({
+      where: { ...tenantWhere(ctx.session!), status: { not: "OTKAZAN" } },
+      include: { stavke: true },
+    });
+    const byMonth: Record<string, { iznos: number; count: number; fakturisano: number }> = {};
+    for (const p of planovi) {
+      for (const s of p.stavke) {
+        const key = `${s.godina}-${String(s.mesec).padStart(2, "0")}`;
+        byMonth[key] ??= { iznos: 0, count: 0, fakturisano: 0 };
+        byMonth[key].iznos += Number(s.iznos);
+        byMonth[key].count += 1;
+        if (s.fakturisano) byMonth[key].fakturisano += Number(s.iznos);
+      }
+    }
+    return Object.entries(byMonth).sort(([a], [b]) => a.localeCompare(b)).map(([period, v]) => ({ period, ...v }));
+  }),
+
+  // Reactivation lista — partneri koji nisu advertising ili su seasonal
+  reactivationList: withPermission("partners", "READ").query(async ({ ctx }) => {
+    return prisma.partner.findMany({
+      where: {
+        ...tenantWhere(ctx.session!),
+        status: { in: ["NOT_ADVERTISING", "SEASONAL"] },
+        deletedAt: null,
+      },
+      include: { _count: { select: { opportunities: true, aktivnosti: true } } },
+      orderBy: { updatedAt: "desc" },
+    });
+  }),
+
+  // Sixmonth triger — kampanje koje su završene pre 6 meseci a partner nema novu
+  sixMonthsSinceCampaign: withPermission("partners", "READ").query(async ({ ctx }) => {
+    const cutoff = new Date(Date.now() - 180 * 86400000);
+    const kampanje = await prisma.kampanja.findMany({
+      where: { ...tenantWhere(ctx.session!), status: "ZAVRSENA", doDatum: { lte: cutoff } },
+      include: { partner: true },
+      orderBy: { doDatum: "desc" },
+    });
+    // Izbaci duplikate po partner-u (zadrži najnoviju)
+    const seen = new Set<string>();
+    const rows: Array<{ partner: string; partnerId: string; kampanjaNaziv: string; zavrsenaData: Date; daniOd: number }> = [];
+    for (const k of kampanje) {
+      if (seen.has(k.partnerId)) continue;
+      seen.add(k.partnerId);
+      // Skip ako partner ima noviji opportunity
+      const noviji = await prisma.opportunity.findFirst({
+        where: { partnerId: k.partnerId, createdAt: { gt: k.doDatum }, deletedAt: null },
+      });
+      if (noviji) continue;
+      rows.push({
+        partner: k.partner.naziv,
+        partnerId: k.partnerId,
+        kampanjaNaziv: k.naziv,
+        zavrsenaData: k.doDatum,
+        daniOd: Math.round((Date.now() - k.doDatum.getTime()) / 86400000),
+      });
+    }
+    return rows.slice(0, 100);
+  }),
 });

@@ -195,6 +195,11 @@ enum PartnerStatus {
   AKTIVAN
   NEAKTIVAN
   BLOKIRAN
+  SEASONAL
+  HIGH_POTENTIAL
+  LOW_POTENTIAL
+  NOT_ADVERTISING
+  COMPETITOR_LOCKED
 }
 
 model Kontakt {
@@ -228,17 +233,19 @@ enum LegalBasis {
 }
 
 model Aktivnost {
-  id            String       @id @default(cuid())
-  partnerId     String?
-  kontaktId     String?
-  opportunityId String?
-  tip           AktivnostTip
-  datum         DateTime
-  opis          String
-  ishod         String?
-  autorId       String
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id              String       @id @default(cuid())
+  partnerId       String?
+  kontaktId       String?
+  opportunityId   String?
+  tip             AktivnostTip
+  datum           DateTime
+  opis            String
+  ishod           String?
+  nextActionDatum DateTime?
+  nextActionOpis  String?
+  autorId         String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
 
   partner     Partner?     @relation(fields: [partnerId], references: [id])
   kontakt     Kontakt?     @relation(fields: [kontaktId], references: [id])
@@ -264,26 +271,30 @@ enum AktivnostTip {
 // =============================================================
 
 model Opportunity {
-  id             String    @id @default(cuid())
-  pravnoLiceId   String
-  naziv          String
-  partnerId      String
-  kontaktId      String?
-  vlasnikId      String
-  stageId        String
-  probability    Int // override; default iz Stage
-  izvor          OppIzvor  @default(OUTBOUND)
-  valuta         String
-  expValue       Decimal   @db.Decimal(12, 2)
-  expCloseDate   DateTime
-  lostReasonId   String?
-  lostReasonText String? // samo za LOST kada je razlog OSTALO
-  tags           String[]
-  opis           String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  closedAt       DateTime?
-  deletedAt      DateTime?
+  id                String    @id @default(cuid())
+  pravnoLiceId      String
+  naziv             String
+  partnerId         String
+  kontaktId         String?
+  vlasnikId         String
+  stageId           String
+  probability       Int // override; default iz Stage
+  izvor             OppIzvor  @default(OUTBOUND)
+  tip               OppTip    @default(NEW)
+  valuta            String
+  expValue          Decimal   @db.Decimal(12, 2)
+  expCloseDate      DateTime
+  realizacijaMesec  Int? // 1-12 za forecast
+  realizacijaGodina Int?
+  lostReasonId      String?
+  lostReasonText    String? // samo za LOST kada je razlog OSTALO
+  tags              String[]
+  opis              String?
+  stageUpdatedAt    DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  closedAt          DateTime?
+  deletedAt         DateTime?
 
   pravnoLice  PravnoLice    @relation(fields: [pravnoLiceId], references: [id])
   partner     Partner       @relation(fields: [partnerId], references: [id])
@@ -307,6 +318,12 @@ enum OppIzvor {
   AGENCY
 }
 
+enum OppTip {
+  NEW
+  RENEWAL
+  UPSELL
+}
+
 model Stage {
   id                 String   @id @default(cuid())
   kod                StageKod @unique
@@ -319,6 +336,8 @@ model Stage {
 }
 
 enum StageKod {
+  LEAD
+  CONTACTED
   NEW
   QUALIFIED
   PROPOSAL_SENT
@@ -343,6 +362,8 @@ enum LostReasonKod {
   TIMING
   BEZ_ODLUKE
   DUPLIKAT
+  AGENCIJA
+  BUDZET_NIJE_ODOBREN
   OSTALO
 }
 
@@ -945,6 +966,62 @@ enum PlanFakturisanjaStatus {
   POTVRDENO
   FAKTURISANO
   OTKAZAN
+}
+
+// =============================================================
+// Prodaja: Ponuda (formalni dokument izvučen iz Opportunity)
+// =============================================================
+
+model Ponuda {
+  id            String       @id @default(cuid())
+  pravnoLiceId  String
+  broj          String
+  opportunityId String?      @unique
+  partnerId     String
+  vlasnikId     String
+  datum         DateTime     @default(now())
+  vaziDo        DateTime
+  status        PonudaStatus @default(DRAFT)
+  poslataAt     DateTime?
+  prihvacenaAt  DateTime?
+  odbijenaAt    DateTime?
+  valuta        String
+  ukupno        Decimal      @db.Decimal(14, 2)
+  stopaPdv      Decimal      @default("20") @db.Decimal(5, 2)
+  napomena      String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  stavke PonudaStavka[]
+
+  @@unique([pravnoLiceId, broj])
+  @@index([partnerId])
+  @@index([pravnoLiceId, status])
+}
+
+enum PonudaStatus {
+  DRAFT
+  POSLATA
+  PRIHVACENA
+  ODBIJENA
+  ISTEKLA
+}
+
+model PonudaStavka {
+  id         String  @id @default(cuid())
+  ponudaId   String
+  rb         Int
+  opis       String
+  grad       String?
+  brojVozila Int     @default(1)
+  cena       Decimal @db.Decimal(12, 2)
+  popustPct  Decimal @default("0") @db.Decimal(5, 2)
+  iznos      Decimal @db.Decimal(14, 2)
+  valuta     String
+
+  ponuda Ponuda @relation(fields: [ponudaId], references: [id], onDelete: Cascade)
+
+  @@index([ponudaId])
 }
 
 model PlanFakturisanjaStavka {

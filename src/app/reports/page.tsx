@@ -7,28 +7,34 @@ import { Input, Field } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
 import { downloadCsv, downloadXlsx } from "@/lib/export";
 
+const MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "Maj", "Jun", "Jul", "Avg", "Sep", "Okt", "Nov", "Dec"];
+
 export default function ReportsPage() {
   const funnel = trpc.pipeline.funnel.useQuery();
+  const conversion = trpc.reports.conversionFunnel.useQuery();
   const winRate = trpc.reports.winRate.useQuery();
   const topPartners = trpc.reports.topPartners.useQuery();
   const aging = trpc.reports.aging.useQuery();
+  const lostReasons = trpc.reports.lostReasonAnalytics.useQuery();
+  const timeInStage = trpc.reports.timeInStage.useQuery();
+  const cashFlow = trpc.reports.cashFlow.useQuery();
+  const reactivation = trpc.reports.reactivationList.useQuery();
+  const sixMo = trpc.reports.sixMonthsSinceCampaign.useQuery();
 
   const [util, setUtil] = useState({
     from: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10),
     to: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
   });
-  const utilization = trpc.reports.inventoryUtilization.useQuery(
-    { from: new Date(util.from), to: new Date(util.to) },
-  );
+  const utilization = trpc.reports.inventoryUtilization.useQuery({ from: new Date(util.from), to: new Date(util.to) });
 
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Izveštaji</h1>
 
       <Report
-        title="Pipeline funnel"
+        title="Pipeline funnel (trenutno)"
         onExportCsv={() => funnel.data && downloadCsv("funnel.csv", funnel.data.map((r) => ({ stage: r.kod, broj: r.count, weighted: r.weightedValue.toFixed(2) })))}
-        onExportXlsx={() => funnel.data && downloadXlsx("funnel.xlsx", "Pipeline funnel", funnel.data.map((r) => ({ stage: r.kod, broj: r.count, weighted: Number(r.weightedValue.toFixed(2)) })))}
+        onExportXlsx={() => funnel.data && downloadXlsx("funnel.xlsx", "Funnel", funnel.data.map((r) => ({ stage: r.kod, broj: r.count, weighted: Number(r.weightedValue.toFixed(2)) })))}
       >
         {funnel.data && (
           <table className="w-full text-sm">
@@ -47,27 +53,157 @@ export default function ReportsPage() {
       </Report>
 
       <Report
+        title="Konverzije (Lead → Offer → Negotiation → Won)"
+        onExportCsv={() => conversion.data && downloadCsv("conversions.csv", [conversion.data.conversions])}
+        onExportXlsx={() => conversion.data && downloadXlsx("conversions.xlsx", "Conv", [conversion.data.conversions])}
+      >
+        {conversion.data && (
+          <div className="grid grid-cols-3 gap-3">
+            <Stat label="Lead → Offer" value={`${conversion.data.conversions.leadToOffer}%`} />
+            <Stat label="Offer → Negotiation" value={`${conversion.data.conversions.offerToNegotiation}%`} />
+            <Stat label="Negotiation → Won" value={`${conversion.data.conversions.negotiationToWon}%`} tone="emerald" />
+          </div>
+        )}
+      </Report>
+
+      <Report
+        title="Time in stage"
+        onExportCsv={() => timeInStage.data && downloadCsv("time-in-stage.csv", timeInStage.data.overdue as any)}
+        onExportXlsx={() => timeInStage.data && downloadXlsx("time-in-stage.xlsx", "TiS", timeInStage.data.overdue as any)}
+      >
+        {timeInStage.data && (
+          <>
+            <table className="w-full text-sm">
+              <thead className="bg-secondary/60 text-left"><tr><th className="px-3 py-2">Stage</th><th className="px-3 py-2 text-right">Broj</th><th className="px-3 py-2 text-right">Prosek (dana)</th><th className="px-3 py-2 text-right">Preko 60 dana</th></tr></thead>
+              <tbody>
+                {Object.entries(timeInStage.data.byStage).map(([kod, v]: any) => (
+                  <tr key={kod} className="border-t">
+                    <td className="px-3 py-2">{kod}</td>
+                    <td className="px-3 py-2 text-right">{v.count}</td>
+                    <td className="px-3 py-2 text-right">{v.avgDani}</td>
+                    <td className="px-3 py-2 text-right">{v.overdue60 > 0 ? <span className="font-bold text-destructive">{v.overdue60}</span> : v.overdue60}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {timeInStage.data.overdue.length > 0 && (
+              <details className="mt-3 text-sm">
+                <summary className="cursor-pointer font-medium">Lista prilika preko 60 dana ({timeInStage.data.overdue.length})</summary>
+                <div className="mt-2 flex flex-col gap-1 text-xs">
+                  {timeInStage.data.overdue.map((r: any) => (
+                    <div key={r.id} className="rounded border p-2">
+                      <strong>{r.naziv}</strong> · {r.partner} · Stage: <code>{r.stage}</code> · Vlasnik: {r.vlasnik} · Dani: <span className="font-bold text-destructive">{r.daniUFazi}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </>
+        )}
+      </Report>
+
+      <Report
+        title="Lost reason analytics"
+        onExportCsv={() => lostReasons.data && downloadCsv("lost-reasons.csv", Object.entries(lostReasons.data).map(([k, v]: any) => ({ razlog: k, broj: v.count, vrednost: v.vrednost })))}
+        onExportXlsx={() => lostReasons.data && downloadXlsx("lost-reasons.xlsx", "Lost", Object.entries(lostReasons.data).map(([k, v]: any) => ({ razlog: k, broj: v.count, vrednost: v.vrednost })))}
+      >
+        {lostReasons.data && (
+          <table className="w-full text-sm">
+            <thead className="bg-secondary/60 text-left"><tr><th className="px-3 py-2">Razlog</th><th className="px-3 py-2 text-right">Broj</th><th className="px-3 py-2 text-right">Izgubljena vrednost</th></tr></thead>
+            <tbody>
+              {Object.entries(lostReasons.data).map(([k, v]: any) => (
+                <tr key={k} className="border-t">
+                  <td className="px-3 py-2">{k}</td>
+                  <td className="px-3 py-2 text-right">{v.count}</td>
+                  <td className="px-3 py-2 text-right">{formatCurrency(v.vrednost, "EUR")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Report>
+
+      <Report
+        title="Cash flow projekcija (iz Planova fakturisanja)"
+        onExportCsv={() => cashFlow.data && downloadCsv("cash-flow.csv", cashFlow.data as any)}
+        onExportXlsx={() => cashFlow.data && downloadXlsx("cash-flow.xlsx", "Cash", cashFlow.data as any)}
+      >
+        {cashFlow.data && (
+          <table className="w-full text-sm">
+            <thead className="bg-secondary/60 text-left"><tr><th className="px-3 py-2">Period</th><th className="px-3 py-2 text-right">Planirani iznos</th><th className="px-3 py-2 text-right">Fakturisano</th><th className="px-3 py-2 text-right">Razlika</th></tr></thead>
+            <tbody>
+              {cashFlow.data.map((r: any) => {
+                const [g, m] = r.period.split("-");
+                return (
+                  <tr key={r.period} className="border-t">
+                    <td className="px-3 py-2">{MONTH_NAMES[Number(m)]} {g}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(r.iznos, "EUR")}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(r.fakturisano, "EUR")}</td>
+                    <td className="px-3 py-2 text-right">{formatCurrency(r.iznos - r.fakturisano, "EUR")}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </Report>
+
+      <Report
+        title="Reactivation lista (Not advertising + Seasonal)"
+        onExportCsv={() => reactivation.data && downloadCsv("reactivation.csv", reactivation.data.map((p: any) => ({ naziv: p.naziv, status: p.status, opp: p._count?.opportunities, akt: p._count?.aktivnosti })))}
+        onExportXlsx={() => reactivation.data && downloadXlsx("reactivation.xlsx", "Reactivation", reactivation.data.map((p: any) => ({ naziv: p.naziv, status: p.status, opp: p._count?.opportunities, akt: p._count?.aktivnosti })))}
+      >
+        {reactivation.data && (
+          <table className="w-full text-sm">
+            <thead className="bg-secondary/60 text-left"><tr><th className="px-3 py-2">Partner</th><th className="px-3 py-2">Status</th><th className="px-3 py-2 text-right">Opp</th><th className="px-3 py-2 text-right">Aktivnosti</th></tr></thead>
+            <tbody>
+              {reactivation.data.length === 0 && <tr><td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">Nema partnera u reactivation listi.</td></tr>}
+              {reactivation.data.map((p: any) => (
+                <tr key={p.id} className="border-t">
+                  <td className="px-3 py-2">{p.naziv}</td>
+                  <td className="px-3 py-2">{p.status}</td>
+                  <td className="px-3 py-2 text-right">{p._count?.opportunities ?? 0}</td>
+                  <td className="px-3 py-2 text-right">{p._count?.aktivnosti ?? 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Report>
+
+      <Report
+        title="6 meseci od poslednje kampanje — kandidati za reaktivaciju"
+        onExportCsv={() => sixMo.data && downloadCsv("6mo.csv", sixMo.data as any)}
+        onExportXlsx={() => sixMo.data && downloadXlsx("6mo.xlsx", "6Mo", sixMo.data as any)}
+      >
+        {sixMo.data && (
+          <table className="w-full text-sm">
+            <thead className="bg-secondary/60 text-left"><tr><th className="px-3 py-2">Partner</th><th className="px-3 py-2">Poslednja kampanja</th><th className="px-3 py-2 text-right">Dana od</th></tr></thead>
+            <tbody>
+              {sixMo.data.length === 0 && <tr><td colSpan={3} className="px-3 py-4 text-center text-muted-foreground">Nema kandidata.</td></tr>}
+              {sixMo.data.map((r: any) => (
+                <tr key={r.partnerId} className="border-t">
+                  <td className="px-3 py-2">{r.partner}</td>
+                  <td className="px-3 py-2">{r.kampanjaNaziv}</td>
+                  <td className="px-3 py-2 text-right">{r.daniOd}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Report>
+
+      <Report
         title="Win rate i ishodi"
         onExportCsv={() => winRate.data && downloadCsv("win-rate.csv", [{ ukupno: winRate.data.total, won: winRate.data.won, lost: winRate.data.lost, winRate: winRate.data.winRate }])}
         onExportXlsx={() => winRate.data && downloadXlsx("win-rate.xlsx", "Win rate", [{ ukupno: winRate.data.total, won: winRate.data.won, lost: winRate.data.lost, winRate: winRate.data.winRate }])}
       >
         {winRate.data && (
-          <>
-            <div className="grid grid-cols-3 gap-3">
-              <Stat label="Ukupno zatvoreno" value={String(winRate.data.total)} />
-              <Stat label="Won" value={`${winRate.data.won}`} tone="emerald" />
-              <Stat label="Lost" value={`${winRate.data.lost}`} tone="red" />
-            </div>
-            <div className="mt-3 text-sm"><strong>Win rate:</strong> {winRate.data.winRate}%</div>
-            <div className="mt-3">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">Po tipu partnera</div>
-              <ul className="mt-1 text-sm">
-                {Object.entries(winRate.data.byPartnerType).map(([k, v]) => (
-                  <li key={k}>{k}: {(v as any).won} won / {(v as any).lost} lost</li>
-                ))}
-              </ul>
-            </div>
-          </>
+          <div className="grid grid-cols-3 gap-3">
+            <Stat label="Ukupno zatvoreno" value={String(winRate.data.total)} />
+            <Stat label="Won" value={String(winRate.data.won)} tone="emerald" />
+            <Stat label="Lost" value={String(winRate.data.lost)} tone="red" />
+          </div>
         )}
       </Report>
 

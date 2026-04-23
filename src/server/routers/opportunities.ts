@@ -133,6 +133,7 @@ export const opportunitiesRouter = router({
           probability: newStage.defaultProbability,
           lostReasonId: lostReason?.id ?? null,
           lostReasonText: input.lostReasonText ?? null,
+          stageUpdatedAt: new Date(),
           closedAt: ["WON", "LOST"].includes(input.stageKod) ? new Date() : null,
         },
       });
