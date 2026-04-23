@@ -21,6 +21,7 @@ import { planoviRouter } from "./routers/planovi";
 import { radniNaloziRouter } from "./routers/radni-nalozi";
 import { planFakturisanjaRouter } from "./routers/plan-fakturisanja";
 import { importsRouter } from "./routers/imports";
+import { ponudeRouter } from "./routers/ponude";
 
 export const appRouter = router({
   partners: partnersRouter,
@@ -45,6 +46,7 @@ export const appRouter = router({
   radniNalozi: radniNaloziRouter,
   planFakturisanja: planFakturisanjaRouter,
   imports: importsRouter,
+  ponude: ponudeRouter,
 });
 
 export type AppRouter = typeof appRouter;
