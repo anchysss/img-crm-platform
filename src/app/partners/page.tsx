@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc-client";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Field } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useTenant } from "@/lib/use-tenant";
 
 export default function PartnersPage() {
   const [q, setQ] = useState("");
@@ -73,9 +74,16 @@ export default function PartnersPage() {
 }
 
 function PartnerCreateDialog({ onClose }: { onClose: () => void }) {
+  const tenant = useTenant();
   const createMut = trpc.partners.create.useMutation({ onSuccess: onClose });
-  const [form, setForm] = useState({ naziv: "", tip: "DIRECT", segment: "C", zemlja: "ME", grad: "", pibVat: "", maticniBroj: "" });
+  const [form, setForm] = useState({ naziv: "", tip: "DIRECT", segment: "C", zemlja: "", grad: "", pibVat: "", maticniBroj: "" });
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!tenant.loading && tenant.iso && !form.zemlja) {
+      setForm((f) => ({ ...f, zemlja: tenant.iso, grad: f.grad || tenant.capital }));
+    }
+  }, [tenant.loading, tenant.iso, tenant.capital, form.zemlja]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -110,16 +118,11 @@ function PartnerCreateDialog({ onClose }: { onClose: () => void }) {
               <option value="C">C</option>
             </Select>
           </Field>
-          <Field label="Zemlja *">
-            <Select value={form.zemlja} onChange={(e) => setForm({ ...form, zemlja: e.target.value })}>
-              <option value="ME">ME</option>
-              <option value="RS">RS</option>
-              <option value="HR">HR</option>
-              <option value="BA">BA</option>
-            </Select>
+          <Field label={`Zemlja (zaključano na ${tenant.kod ?? "..."})`}>
+            <Input value={form.zemlja} disabled readOnly />
           </Field>
-          <Field label="Grad">
-            <Input value={form.grad} onChange={(e) => setForm({ ...form, grad: e.target.value })} />
+          <Field label="Grad" hint={tenant.capital ? `Default: ${tenant.capital}` : undefined}>
+            <Input value={form.grad} onChange={(e) => setForm({ ...form, grad: e.target.value })} placeholder={tenant.capital} />
           </Field>
           <Field label="PIB/VAT">
             <Input value={form.pibVat} onChange={(e) => setForm({ ...form, pibVat: e.target.value })} />

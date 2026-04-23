@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 import { Button } from "@/components/ui/button";
 import { Input, Select, Field } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { useTenant } from "@/lib/use-tenant";
 
 export default function VehiclesPage() {
   const [open, setOpen] = useState(false);
@@ -50,14 +51,24 @@ export default function VehiclesPage() {
 }
 
 function VehicleCreateDialog({ onClose }: { onClose: () => void }) {
+  const tenant = useTenant();
   const mut = trpc.vehicles.create.useMutation({ onSuccess: onClose });
-  const [form, setForm] = useState({ registracija: "", tip: "BUS", zemlja: "ME", grad: "Podgorica" });
+  const [form, setForm] = useState({ registracija: "", tip: "BUS", zemlja: "", grad: "" });
   const [err, setErr] = useState<string | null>(null);
+
+  // Autofill zemlja (ISO) i glavni grad kad se tenant učita
+  useEffect(() => {
+    if (!tenant.loading && tenant.iso && !form.zemlja) {
+      setForm((f) => ({ ...f, zemlja: tenant.iso, grad: f.grad || tenant.capital }));
+    }
+  }, [tenant.loading, tenant.iso, tenant.capital, form.zemlja]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
     try { await mut.mutateAsync(form as any); } catch (e: any) { setErr(e.message); }
   }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-lg bg-card p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
@@ -71,12 +82,12 @@ function VehicleCreateDialog({ onClose }: { onClose: () => void }) {
               <option value="DRUGO">Drugo</option>
             </Select>
           </Field>
-          <Field label="Zemlja *">
-            <Select value={form.zemlja} onChange={(e) => setForm({ ...form, zemlja: e.target.value })}>
-              <option value="ME">ME</option><option value="RS">RS</option><option value="HR">HR</option><option value="BA">BA</option>
-            </Select>
+          <Field label={`Zemlja (zaključano na ${tenant.kod ?? "..."})`}>
+            <Input value={form.zemlja} disabled readOnly />
           </Field>
-          <Field label="Grad *"><Input required value={form.grad} onChange={(e) => setForm({ ...form, grad: e.target.value })} /></Field>
+          <Field label="Grad *" hint={`Default: glavni grad ${tenant.name || "države"}`}>
+            <Input required value={form.grad} onChange={(e) => setForm({ ...form, grad: e.target.value })} placeholder={tenant.capital} />
+          </Field>
           {err && <p className="text-sm text-destructive">{err}</p>}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Otkaži</Button>
