@@ -19,8 +19,10 @@ export async function verifyPassword(hashStr: string, pw: string) {
 }
 
 export async function authenticate(email: string, password: string, ip?: string, userAgent?: string): Promise<SessionCtx> {
-  const rl = rateLimit(`login:${ip ?? email}`, 5, 15 * 60 * 1000);
-  if (!rl.ok) throw new AppError("RATE_LIMIT", `Previše pokušaja, pokušajte za ${Math.ceil(rl.retryAfterMs / 1000)}s`);
+  // Rate limit samo neuspele pokušaje, po (ip, email) paru.
+  // 20 neuspelih / 15 min per ključ (PZ NFR 4.1). Per-account lockout
+  // se zasebno trigger-uje kroz DB kolonu `lockedUntil`.
+  const rlKey = `login-failed:${ip ?? "unknown"}:${email}`;
 
   const user = await prisma.korisnik.findUnique({
     where: { email },
@@ -29,7 +31,9 @@ export async function authenticate(email: string, password: string, ip?: string,
     },
   });
   if (!user || !user.aktivan || user.deletedAt) {
+    const rl = rateLimit(rlKey, 20, 15 * 60 * 1000);
     await audit({ entitet: "Korisnik", entitetId: email, akcija: "LOGIN_FAILED", ip, userAgent, diff: { reason: "not_found_or_inactive" } });
+    if (!rl.ok) throw new AppError("RATE_LIMIT", `Previše neuspelih pokušaja, sačekajte ${Math.ceil(rl.retryAfterMs / 1000)}s`);
     throw new AppError("UNAUTHORIZED", "Pogrešan email ili lozinka");
   }
 
@@ -39,6 +43,8 @@ export async function authenticate(email: string, password: string, ip?: string,
 
   const ok = await verifyPassword(user.passwordHash, password);
   if (!ok) {
+    const rl = rateLimit(rlKey, 20, 15 * 60 * 1000);
+    if (!rl.ok) throw new AppError("RATE_LIMIT", `Previše neuspelih pokušaja, sačekajte ${Math.ceil(rl.retryAfterMs / 1000)}s`);
     const failedLoginAttempts = user.failedLoginAttempts + 1;
     await prisma.korisnik.update({
       where: { id: user.id },
