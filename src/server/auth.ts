@@ -1,4 +1,4 @@
-import argon2 from "argon2";
+import { hash, verify } from "@node-rs/argon2";
 import { authenticator } from "otplib";
 import { prisma } from "@/lib/prisma";
 import { AppError } from "./errors";
@@ -7,12 +7,12 @@ import { audit } from "./audit";
 import type { SessionCtx } from "./rbac";
 
 export async function hashPassword(pw: string) {
-  return argon2.hash(pw);
+  return hash(pw);
 }
 
-export async function verifyPassword(hash: string, pw: string) {
+export async function verifyPassword(hashStr: string, pw: string) {
   try {
-    return await argon2.verify(hash, pw);
+    return await verify(hashStr, pw);
   } catch {
     return false;
   }

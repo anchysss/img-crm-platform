@@ -8,6 +8,7 @@ const nextConfig = {
   poweredByHeader: false,
   experimental: {
     serverActions: { allowedOrigins: ["localhost:3000"] },
+    serverComponentsExternalPackages: ["@node-rs/argon2", "@prisma/client"],
   },
   async headers() {
     return [

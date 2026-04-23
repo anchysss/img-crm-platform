@@ -16,7 +16,7 @@ import {
   AktivnostTip,
   LegalBasis,
 } from "@prisma/client";
-import argon2 from "argon2";
+import { hash as argon2Hash } from "@node-rs/argon2";
 
 const prisma = new PrismaClient();
 
@@ -205,7 +205,7 @@ async function seedLostReasons() {
 }
 
 async function seedUsers(pravnaLica: Awaited<ReturnType<typeof seedPravnaLica>>, roles: Awaited<ReturnType<typeof seedRoleAndPermissions>>) {
-  const hash = await argon2.hash(DEV_PASSWORD);
+  const hash = await argon2Hash(DEV_PASSWORD);
   const rolaByKod = Object.fromEntries(roles.map((r) => [r.kod, r])) as Record<RolaKod, (typeof roles)[number]>;
   const plByKod = Object.fromEntries(pravnaLica.map((p) => [p.kod, p]));
 
