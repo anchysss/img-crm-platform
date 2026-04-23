@@ -16,6 +16,11 @@ import { notificationsRouter } from "./routers/notifications";
 import { auditRouter } from "./routers/audit";
 import { reportsRouter } from "./routers/reports";
 import { lookupsRouter } from "./routers/lookups";
+import { kataloziRouter } from "./routers/katalozi";
+import { planoviRouter } from "./routers/planovi";
+import { radniNaloziRouter } from "./routers/radni-nalozi";
+import { planFakturisanjaRouter } from "./routers/plan-fakturisanja";
+import { importsRouter } from "./routers/imports";
 
 export const appRouter = router({
   partners: partnersRouter,
@@ -35,6 +40,11 @@ export const appRouter = router({
   audit: auditRouter,
   reports: reportsRouter,
   lookups: lookupsRouter,
+  katalozi: kataloziRouter,
+  planovi: planoviRouter,
+  radniNalozi: radniNaloziRouter,
+  planFakturisanja: planFakturisanjaRouter,
+  imports: importsRouter,
 });
 
 export type AppRouter = typeof appRouter;

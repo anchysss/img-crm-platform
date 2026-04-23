@@ -5,7 +5,8 @@ import { tenantWhere, ensureTenant } from "../tenant";
 import { audit } from "../audit";
 import { AppError } from "../errors";
 import { StageKod, LostReasonKod, OppIzvor, RezervacijaStatus } from "@prisma/client";
-import { notify } from "../services/notify";
+import { notify, notifyRoles } from "../services/notify";
+import { createRadniNalogForOpportunity, createPlanFakturisanjaForWon } from "../services/work-order";
 
 const oppInput = z.object({
   naziv: z.string().min(2).max(200),
@@ -145,12 +146,32 @@ export const opportunitiesRouter = router({
       });
 
       // Side-effect: NEGOTIATION → hold na postojećim predlogom (ako postoji)
-      // Kod Won → konverzija u rezervacije
+      // Kod Won → konverzija u rezervacije + automatsko kreiranje radnog naloga + plana fakturisanja
       if (input.stageKod === "WON") {
         await prisma.rezervacija.updateMany({
           where: { opportunityId: input.id, status: RezervacijaStatus.HOLD },
           data: { status: RezervacijaStatus.CONFIRMED, holdIstice: null },
         });
+        // Auto-kreiranje radnog naloga + plana fakturisanja + notifikacije za logistiku/finansije
+        try {
+          await createRadniNalogForOpportunity(opp as any);
+          await createPlanFakturisanjaForWon({
+            opp: opp as any,
+            kampanjaOd: opp.expCloseDate,
+            kampanjaDo: new Date(opp.expCloseDate.getTime() + 30 * 86400000),
+          });
+          await notifyRoles({
+            pravnoLiceId: opp.pravnoLiceId,
+            rolaKodovi: ["SALES_MANAGER", "COUNTRY_MANAGER", "ADMIN"],
+            tip: "PONUDA_PRIHVACENA",
+            poruka: `Ponuda "${opp.naziv}" je prihvaćena i prosleđena logistici + finansijama.`,
+            linkUrl: `/prodaja/ponude/${opp.id}`,
+          });
+        } catch (e) {
+          // Ne prekidaj Stage promenu ako automation padne; loguj
+          // eslint-disable-next-line no-console
+          console.error("[won-automation] failed", e);
+        }
       }
       if (input.stageKod === "LOST") {
         await prisma.rezervacija.updateMany({

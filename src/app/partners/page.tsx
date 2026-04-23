@@ -19,7 +19,10 @@ export default function PartnersPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Partneri</h1>
-        <Button onClick={() => setOpen(true)}>+ Novi partner</Button>
+        <div className="flex gap-2">
+          <Link href="/prodaja/partneri/import" className="inline-flex items-center rounded-md border bg-background px-3 py-2 text-sm hover:bg-secondary">Import / Export</Link>
+          <Button onClick={() => setOpen(true)}>+ Novi partner</Button>
+        </div>
       </div>
 
       <div className="flex gap-3">

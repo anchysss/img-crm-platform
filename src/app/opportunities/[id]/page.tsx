@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { downloadOfferXlsx } from "@/lib/offer-export";
 
 export default function OpportunityDetailPage() {
   const params = useParams<{ id: string }>();
@@ -32,6 +33,42 @@ export default function OpportunityDetailPage() {
   if (!opp) return <p>Prilika nije pronađena.</p>;
 
   const weighted = Number(opp.expValue) * (opp.probability / 100);
+
+  async function exportXlsx() {
+    if (!opp) return;
+    const sastavio = `${opp.vlasnik.ime} ${opp.vlasnik.prezime}`;
+    await downloadOfferXlsx(`Ponuda-${opp.naziv.replace(/[^a-z0-9]/gi, "_")}.xlsx`, {
+      brojPonude: `P-${opp.id.slice(-8).toUpperCase()}`,
+      datum: new Date(),
+      poddeonica: "OUTDOOR / INDOOR — PONUDA",
+      klijent: opp.partner.naziv,
+      klijentAdresa: opp.partner.adresa ?? undefined,
+      kampanjaNaziv: opp.naziv,
+      period: formatDate(opp.expCloseDate),
+      grad: opp.partner.grad ?? "—",
+      brojVozila: 1,
+      vaziDo: new Date(Date.now() + 30 * 86400000),
+      sastavio,
+      sastavioEmail: opp.vlasnik.email,
+      pravnoLiceNaziv: "INFO MEDIA GROUP d.o.o.",
+      pravnoLiceAdresa: "Omladinskih brigada 86, West 65 Tower, Beograd",
+      pravnoLiceTel: "+381 11 3370 553",
+      pravnoLiceEmail: "info@infomediagroup.rs",
+      stavke: [
+        {
+          rb: 1,
+          opis: opp.naziv,
+          grad: opp.partner.grad ?? "—",
+          brojVozila: 1,
+          cena: Number(opp.expValue),
+          popustPct: 0,
+          cenaSaPopustom: Number(opp.expValue),
+        },
+      ],
+      valuta: opp.valuta,
+      stopaPdv: 20,
+    });
+  }
 
   async function changeStage() {
     setError(null);
@@ -59,6 +96,10 @@ export default function OpportunityDetailPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-end gap-2">
+        <Button size="sm" variant="outline" onClick={exportXlsx}>XLSX ponuda</Button>
+        <Button size="sm" variant="outline" onClick={() => window.print()}>PDF / Štampa</Button>
+      </div>
       <header>
         <div className="flex items-start justify-between">
           <div>
