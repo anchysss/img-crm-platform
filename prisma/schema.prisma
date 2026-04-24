@@ -374,11 +374,28 @@ enum LostReasonKod {
 model Vozilo {
   id                String       @id @default(cuid())
   pravnoLiceId      String
-  registracija      String
+  // bcMediaBox kolone:
+  sifra             String? // "Šifra" — IMG interna šifra
+  dobavljac         String? // "Dobavljač" — operator prevoza (npr. JKP GSP BEOGRAD)
+  tipVozilaTxt      String? // "Tip vozila" — tekstualni (npr. Tramvaj solo KT4, Autobus zglobni)
+  registracija      String // "Registarski broj"
+  inventurniBroj    String? // "Inventurni broj" — garažni/inventarni broj
+  oznaka            String? // "Oznaka"
+  garaza            String? // "Garaža" (GSP Centrala, Dorćol, Karaburma, Zemun, Kosmaj, Novi Beograd)
+  linija            String[]     @default([]) // "Linija" — npr. "BG, 56 ZELENI VENAC - PETLOVO BRDO"
+  zakupOd           DateTime? // "Od"
+  zakupDo           DateTime? // "Do"
+  aktivan           Boolean      @default(true) // "Aktivan"
+  model             String? // "Model" (Solaris Urbino 18, Mercedes Citaro…)
+  gps               Boolean      @default(false) // "GPS"
+  opis              String? // "Opis" — (U ZAKUPU, U ZAKUPU / neaktivan; kvar, ŠIHTA…)
+  brojUgovora       String? // "Broj ugovora"
+  komNaknadaDatumDo DateTime? // "Kom.naknada (Datum do)"
+  // Postojeća IMG polja:
   tip               VoziloTip
   agencijaVlasnikId String?
   zemlja            String
-  grad              String
+  grad              String // "Lokacija" iz bcMediaBox mapira se ovde
   slikaUrl          String?
   status            VoziloStatus @default(AKTIVNO)
   createdAt         DateTime     @default(now())
@@ -391,18 +408,27 @@ model Vozilo {
 
   @@unique([pravnoLiceId, registracija])
   @@index([grad])
+  @@index([pravnoLiceId, garaza])
+  @@index([pravnoLiceId, inventurniBroj])
 }
 
 enum VoziloTip {
   BUS
+  BUS_ZGLOBNI
   MINI
+  TRAMVAJ
+  TROLEJBUS
   DRUGO
 }
 
 enum VoziloStatus {
   AKTIVNO
+  U_ZAKUPU
   SERVIS
+  KVAR
+  NA_FARBANJU
   POVUCENO
+  SIHTA
 }
 
 model Pozicija {
