@@ -15,6 +15,9 @@ const stavkaSchema = z.object({
   brojVozila: z.number().int().min(1).default(1),
   cena: z.string(),
   popustPct: z.string().default("0"),
+  tipBrendinga: z.string().optional(),
+  skicaUrl: z.string().url().optional().or(z.literal("")),
+  voziloId: z.string().cuid().optional(),
 });
 
 function rndBroj(kod: string) {
@@ -71,7 +74,14 @@ export const ponudeRouter = router({
     const stavkeData = input.stavke.map((s) => {
       const brutto = Number(s.cena) * s.brojVozila;
       const iznos = brutto * (1 - Number(s.popustPct) / 100);
-      return { ...s, iznos: iznos.toFixed(2), valuta: input.valuta };
+      const { tipBrendinga, skicaUrl, ...rest } = s;
+      return {
+        ...rest,
+        tipBrendinga: tipBrendinga ? (tipBrendinga as any) : undefined,
+        skicaUrl: skicaUrl || undefined,
+        iznos: iznos.toFixed(2),
+        valuta: input.valuta,
+      };
     });
     const ukupno = stavkeData.reduce((a, s) => a + Number(s.iznos), 0);
 

@@ -4,12 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { tenantWhere, ensureTenant } from "../tenant";
 import { audit } from "../audit";
 import { AppError } from "../errors";
-import { VoziloTip, VoziloStatus, PozicijaTip } from "@prisma/client";
+import { VoziloTip, VoziloStatus, PozicijaTip, TipOglasa, JedinicaMere } from "@prisma/client";
 
-// bcMediaBox-kompatibilni input (17 kolona)
 const vozilofields = {
   sifra: z.string().optional(),
-  dobavljac: z.string().optional(),
+  dobavljac: z.string().optional(), // PREVOZNIK (label change u UI-ju)
   tipVozilaTxt: z.string().optional(),
   registracija: z.string().min(1).max(40),
   inventurniBroj: z.string().optional(),
@@ -24,10 +23,19 @@ const vozilofields = {
   opis: z.string().optional(),
   brojUgovora: z.string().optional(),
   komNaknadaDatumDo: z.coerce.date().optional(),
+  // Skice (slike pozicija brendinga)
+  skicaSpoljnaUrl: z.string().url().optional().or(z.literal("")),
+  skicaUnutrasnjaUrl: z.string().url().optional().or(z.literal("")),
+  // Digital
+  routerBroj: z.string().optional(),
+  kameraBroj: z.string().optional(),
+  // Tipovi brendinga koje vozilo PODRŽAVA
+  podrzaniTipoviBrendinga: z.array(z.nativeEnum(TipOglasa)).optional(),
+  // Postojeća polja
   tip: z.nativeEnum(VoziloTip),
   zemlja: z.string().length(2),
   grad: z.string().min(1),
-  slikaUrl: z.string().url().optional(),
+  slikaUrl: z.string().url().optional().or(z.literal("")),
   status: z.nativeEnum(VoziloStatus).optional(),
 };
 
@@ -86,11 +94,48 @@ export const vehiclesRouter = router({
   byId: withPermission("vehicles", "READ").input(z.object({ id: z.string().cuid() })).query(async ({ ctx, input }) => {
     const v = await prisma.vozilo.findUnique({
       where: { id: input.id },
-      include: { pozicije: true, komunalneNaknade: { orderBy: { doDatum: "desc" } } },
+      include: {
+        pozicije: true,
+        komunalneNaknade: { orderBy: { doDatum: "desc" } },
+        ceneZakupa: { orderBy: { tipBrendinga: "asc" } },
+      },
     });
     if (!v) return null;
     ensureTenant(ctx.session!, v.pravnoLiceId);
     return v;
+  }),
+
+  // Postavi cenu zakupa za tip brendinga (upsert)
+  setCenaZakupa: withPermission("vehicles", "UPDATE").input(
+    z.object({
+      voziloId: z.string().cuid(),
+      tipBrendinga: z.nativeEnum(TipOglasa),
+      cena: z.string(),
+      valuta: z.string().length(3),
+      jedinicaMere: z.nativeEnum(JedinicaMere).default(JedinicaMere.PER_WEEK),
+      napomena: z.string().optional(),
+    }),
+  ).mutation(async ({ ctx, input }) => {
+    const v = await prisma.vozilo.findUnique({ where: { id: input.voziloId } });
+    if (!v) throw new AppError("NOT_FOUND", "Vozilo ne postoji");
+    ensureTenant(ctx.session!, v.pravnoLiceId);
+    const result = await prisma.voziloCenaZakupa.upsert({
+      where: { voziloId_tipBrendinga: { voziloId: input.voziloId, tipBrendinga: input.tipBrendinga } },
+      update: { cena: input.cena, valuta: input.valuta, jedinicaMere: input.jedinicaMere, napomena: input.napomena },
+      create: input,
+    });
+    await audit({ ctx: ctx.session, entitet: "VoziloCenaZakupa", entitetId: result.id, akcija: "UPDATE", diff: { tip: input.tipBrendinga, cena: input.cena } });
+    return result;
+  }),
+
+  removeCenaZakupa: withPermission("vehicles", "UPDATE").input(
+    z.object({ id: z.string().cuid() }),
+  ).mutation(async ({ ctx, input }) => {
+    const cena = await prisma.voziloCenaZakupa.findUnique({ where: { id: input.id }, include: { vozilo: true } });
+    if (!cena) throw new AppError("NOT_FOUND", "Cena ne postoji");
+    ensureTenant(ctx.session!, cena.vozilo.pravnoLiceId);
+    await prisma.voziloCenaZakupa.delete({ where: { id: input.id } });
+    return { ok: true };
   }),
 
   reservationsForVehicle: withPermission("vehicles", "READ").input(z.object({ id: z.string().cuid() })).query(async ({ ctx, input }) => {

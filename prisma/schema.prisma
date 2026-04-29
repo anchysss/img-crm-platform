@@ -379,44 +379,72 @@ enum LostReasonKod {
 // =============================================================
 
 model Vozilo {
-  id                String       @id @default(cuid())
-  pravnoLiceId      String
+  id                      String       @id @default(cuid())
+  pravnoLiceId            String
   // bcMediaBox kolone:
-  sifra             String? // "Šifra" — IMG interna šifra
-  dobavljac         String? // "Dobavljač" — operator prevoza (npr. JKP GSP BEOGRAD)
-  tipVozilaTxt      String? // "Tip vozila" — tekstualni (npr. Tramvaj solo KT4, Autobus zglobni)
-  registracija      String // "Registarski broj"
-  inventurniBroj    String? // "Inventurni broj" — garažni/inventarni broj
-  oznaka            String? // "Oznaka"
-  garaza            String? // "Garaža" (GSP Centrala, Dorćol, Karaburma, Zemun, Kosmaj, Novi Beograd)
-  linija            String[]     @default([]) // "Linija" — npr. "BG, 56 ZELENI VENAC - PETLOVO BRDO"
-  zakupOd           DateTime? // "Od"
-  zakupDo           DateTime? // "Do"
-  aktivan           Boolean      @default(true) // "Aktivan"
-  model             String? // "Model" (Solaris Urbino 18, Mercedes Citaro…)
-  gps               Boolean      @default(false) // "GPS"
-  opis              String? // "Opis" — (U ZAKUPU, U ZAKUPU / neaktivan; kvar, ŠIHTA…)
-  brojUgovora       String? // "Broj ugovora"
-  komNaknadaDatumDo DateTime? // "Kom.naknada (Datum do)"
+  sifra                   String? // "Šifra" — IMG interna šifra
+  dobavljac               String? // "Dobavljač" — operator prevoza (npr. JKP GSP BEOGRAD)
+  tipVozilaTxt            String? // "Tip vozila" — tekstualni (npr. Tramvaj solo KT4, Autobus zglobni)
+  registracija            String // "Registarski broj"
+  inventurniBroj          String? // "Inventurni broj" — garažni/inventarni broj
+  oznaka                  String? // "Oznaka"
+  garaza                  String? // "Garaža" (GSP Centrala, Dorćol, Karaburma, Zemun, Kosmaj, Novi Beograd)
+  linija                  String[]     @default([]) // "Linija" — npr. "BG, 56 ZELENI VENAC - PETLOVO BRDO"
+  zakupOd                 DateTime? // "Od"
+  zakupDo                 DateTime? // "Do"
+  aktivan                 Boolean      @default(true) // "Aktivan"
+  model                   String? // "Model" (Solaris Urbino 18, Mercedes Citaro…)
+  gps                     Boolean      @default(false) // "GPS"
+  opis                    String? // "Opis" — (U ZAKUPU, U ZAKUPU / neaktivan; kvar, ŠIHTA…)
+  brojUgovora             String? // "Broj ugovora"
+  komNaknadaDatumDo       DateTime? // legacy "Kom.naknada (Datum do)"
+  // Skice (slike) za prodajne ponude i logistiku:
+  skicaSpoljnaUrl         String? // skica/foto vozila spolja sa pozicijama brendinga
+  skicaUnutrasnjaUrl      String? // skica/foto unutrašnjosti sa pozicijama plakata
+  // Digital posebni podaci (ako vozilo ima INDOOR_DIGITAL ekrane):
+  routerBroj              String? // serijski / inventarni broj router-a
+  kameraBroj              String? // serijski / inventarni broj kamere
+  // Tipovi brendinga koje ovo vozilo PODRŽAVA (multi-select)
+  podrzaniTipoviBrendinga TipOglasa[]  @default([])
   // Postojeća IMG polja:
-  tip               VoziloTip
-  agencijaVlasnikId String?
-  zemlja            String
-  grad              String // "Lokacija" iz bcMediaBox mapira se ovde
-  slikaUrl          String?
-  status            VoziloStatus @default(AKTIVNO)
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
-  deletedAt         DateTime?
+  tip                     VoziloTip
+  agencijaVlasnikId       String?
+  zemlja                  String
+  grad                    String
+  slikaUrl                String?
+  status                  VoziloStatus @default(AKTIVNO)
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+  deletedAt               DateTime?
 
   pravnoLice       PravnoLice         @relation(fields: [pravnoLiceId], references: [id])
   pozicije         Pozicija[]
   komunalneNaknade KomunalnaNaknada[]
+  ceneZakupa       VoziloCenaZakupa[]
+  ponudaStavke     PonudaStavka[]
 
   @@unique([pravnoLiceId, registracija])
   @@index([grad])
   @@index([pravnoLiceId, garaza])
   @@index([pravnoLiceId, inventurniBroj])
+}
+
+// Cena zakupa po tipu brendinga per vozilu (zameni "Kom.naknada" pojam)
+model VoziloCenaZakupa {
+  id           String       @id @default(cuid())
+  voziloId     String
+  tipBrendinga TipOglasa
+  cena         Decimal      @db.Decimal(12, 2)
+  valuta       String
+  jedinicaMere JedinicaMere @default(PER_WEEK)
+  napomena     String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  vozilo Vozilo @relation(fields: [voziloId], references: [id], onDelete: Cascade)
+
+  @@unique([voziloId, tipBrendinga])
+  @@index([voziloId])
 }
 
 enum VoziloTip {
@@ -847,13 +875,30 @@ model Cenovnik {
 }
 
 enum TipOglasa {
-  OUTDOOR_TOTAL
+  // === OUTDOOR (spoljašnji branding) ===
+  OUTDOOR_FULL_BRANDING
+  OUTDOOR_STANDARD_BRANDING
   OUTDOOR_PARCIJAL
+  OUTDOOR_SUPER_PARCIJAL
   OUTDOOR_OPEN_TOP
+  OUTDOOR_TOTAL // legacy alias
+
+  // === INDOOR (unutrašnji formati) ===
   INDOOR_STANDARD
+  INDOOR_OSVETLJENI_PANO
+  INDOOR_BACKLIGHT // legacy alias
   INDOOR_DIGITAL
-  INDOOR_POSTER
-  INDOOR_BACKLIGHT
+  INDOOR_POSTER // legacy alias
+
+  // === DODATNI FORMATI ===
+  DODATAK_HENGER_STANDARD
+  DODATAK_HENGER_NESTANDARD
+  DODATAK_VOBLER
+  DODATAK_RUCKE_VALJKASTE
+  DODATAK_RUCKE_PLJOSNATE
+  DODATAK_BLENDIRANJE_PLAFONA
+  DODATAK_NALEPNICE_SEDISTA
+
   DIGITAL
   KOMUNALNA
   OSTALO
@@ -1049,20 +1094,25 @@ enum PonudaStatus {
 }
 
 model PonudaStavka {
-  id         String  @id @default(cuid())
-  ponudaId   String
-  rb         Int
-  opis       String
-  grad       String?
-  brojVozila Int     @default(1)
-  cena       Decimal @db.Decimal(12, 2)
-  popustPct  Decimal @default("0") @db.Decimal(5, 2)
-  iznos      Decimal @db.Decimal(14, 2)
-  valuta     String
+  id           String     @id @default(cuid())
+  ponudaId     String
+  rb           Int
+  opis         String
+  grad         String?
+  brojVozila   Int        @default(1)
+  cena         Decimal    @db.Decimal(12, 2)
+  popustPct    Decimal    @default("0") @db.Decimal(5, 2)
+  iznos        Decimal    @db.Decimal(14, 2)
+  valuta       String
+  tipBrendinga TipOglasa?
+  skicaUrl     String?
+  voziloId     String?
 
-  ponuda Ponuda @relation(fields: [ponudaId], references: [id], onDelete: Cascade)
+  ponuda Ponuda  @relation(fields: [ponudaId], references: [id], onDelete: Cascade)
+  vozilo Vozilo? @relation(fields: [voziloId], references: [id])
 
   @@index([ponudaId])
+  @@index([voziloId])
 }
 
 model PlanFakturisanjaStavka {

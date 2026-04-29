@@ -1,0 +1,45 @@
+-- TipOglasa: novi enum vrednosti
+ALTER TYPE "TipOglasa" ADD VALUE IF NOT EXISTS 'OUTDOOR_FULL_BRANDING';
+ALTER TYPE "TipOglasa" ADD VALUE IF NOT EXISTS 'OUTDOOR_STANDARD_BRANDING';
+ALTER TYPE "TipOglasa" ADD VALUE IF NOT EXISTS 'OUTDOOR_SUPER_PARCIJAL';
+ALTER TYPE "TipOglasa" ADD VALUE IF NOT EXISTS 'INDOOR_OSVETLJENI_PANO';
+ALTER TYPE "TipOglasa" ADD VALUE IF NOT EXISTS 'DODATAK_HENGER_STANDARD';
+ALTER TYPE "TipOglasa" ADD VALUE IF NOT EXISTS 'DODATAK_HENGER_NESTANDARD';
+ALTER TYPE "TipOglasa" ADD VALUE IF NOT EXISTS 'DODATAK_VOBLER';
+ALTER TYPE "TipOglasa" ADD VALUE IF NOT EXISTS 'DODATAK_RUCKE_VALJKASTE';
+ALTER TYPE "TipOglasa" ADD VALUE IF NOT EXISTS 'DODATAK_RUCKE_PLJOSNATE';
+ALTER TYPE "TipOglasa" ADD VALUE IF NOT EXISTS 'DODATAK_BLENDIRANJE_PLAFONA';
+ALTER TYPE "TipOglasa" ADD VALUE IF NOT EXISTS 'DODATAK_NALEPNICE_SEDISTA';
+
+-- Vozilo: skice + digital + podrzani tipovi
+ALTER TABLE "Vozilo"
+  ADD COLUMN IF NOT EXISTS "skicaSpoljnaUrl" TEXT,
+  ADD COLUMN IF NOT EXISTS "skicaUnutrasnjaUrl" TEXT,
+  ADD COLUMN IF NOT EXISTS "routerBroj" TEXT,
+  ADD COLUMN IF NOT EXISTS "kameraBroj" TEXT,
+  ADD COLUMN IF NOT EXISTS "podrzaniTipoviBrendinga" "TipOglasa"[] DEFAULT ARRAY[]::"TipOglasa"[];
+
+-- VoziloCenaZakupa
+CREATE TABLE IF NOT EXISTS "VoziloCenaZakupa" (
+  "id"           TEXT NOT NULL,
+  "voziloId"     TEXT NOT NULL,
+  "tipBrendinga" "TipOglasa" NOT NULL,
+  "cena"         DECIMAL(12,2) NOT NULL,
+  "valuta"       TEXT NOT NULL,
+  "jedinicaMere" "JedinicaMere" NOT NULL DEFAULT 'PER_WEEK',
+  "napomena"     TEXT,
+  "createdAt"    TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt"    TIMESTAMP(3) NOT NULL,
+  CONSTRAINT "VoziloCenaZakupa_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "VoziloCenaZakupa_voziloId_tipBrendinga_key"
+  ON "VoziloCenaZakupa"("voziloId", "tipBrendinga");
+
+CREATE INDEX IF NOT EXISTS "VoziloCenaZakupa_voziloId_idx"
+  ON "VoziloCenaZakupa"("voziloId");
+
+ALTER TABLE "VoziloCenaZakupa"
+  ADD CONSTRAINT "VoziloCenaZakupa_voziloId_fkey"
+  FOREIGN KEY ("voziloId") REFERENCES "Vozilo"("id")
+  ON DELETE CASCADE ON UPDATE CASCADE;

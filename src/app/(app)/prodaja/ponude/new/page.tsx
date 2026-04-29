@@ -7,8 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Input, Select, Field, Textarea } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
 import { useTenant } from "@/lib/use-tenant";
+import { TIP_OGLASA_GROUPS, TIP_OGLASA_LABEL, skicaTip } from "@/lib/tip-oglasa";
 
-interface Stavka { rb: number; opis: string; grad: string; brojVozila: number; cena: string; popustPct: string; }
+interface Stavka {
+  rb: number;
+  opis: string;
+  grad: string;
+  brojVozila: number;
+  cena: string;
+  popustPct: string;
+  tipBrendinga?: string; // OUTDOOR_FULL_BRANDING, INDOOR_DIGITAL, DODATAK_VOBLER, ...
+  skicaUrl?: string;     // URL skice vozila (spolja/unutra) ako vozilo to ima
+  voziloId?: string;     // ako se ova stavka odnosi na konkretno vozilo
+}
 
 export default function NovaPonudaPage() {
   const router = useRouter();
@@ -32,7 +43,7 @@ export default function NovaPonudaPage() {
     napomena: "",
   });
   const [stavke, setStavke] = useState<Stavka[]>([
-    { rb: 1, opis: "OUTDOOR - Total branding", grad: tenant.capital || "Beograd", brojVozila: 5, cena: "650", popustPct: "10" },
+    { rb: 1, opis: "Outdoor — Full branding", grad: tenant.capital || "Beograd", brojVozila: 5, cena: "650", popustPct: "10", tipBrendinga: "OUTDOOR_FULL_BRANDING" },
   ]);
   const [error, setError] = useState<string | null>(null);
 
@@ -150,6 +161,7 @@ export default function NovaPonudaPage() {
               <thead className="bg-secondary/60 text-left">
                 <tr>
                   <th className="px-2 py-2 w-10">Rb</th>
+                  <th className="px-2 py-2 w-44">Tip brendinga</th>
                   <th className="px-2 py-2">Opis</th>
                   <th className="px-2 py-2 w-32">Grad</th>
                   <th className="px-2 py-2 w-20">Vozila</th>
@@ -162,9 +174,25 @@ export default function NovaPonudaPage() {
               <tbody>
                 {stavke.map((s, i) => {
                   const iznos = Number(s.cena) * s.brojVozila * (1 - Number(s.popustPct) / 100);
+                  const skicaTipForItem = s.tipBrendinga ? skicaTip(s.tipBrendinga) : null;
                   return (
                     <tr key={i} className="border-t">
                       <td className="px-2 py-1.5">{s.rb}</td>
+                      <td className="px-2 py-1">
+                        <Select value={s.tipBrendinga ?? ""} onChange={(e) => updateCell(i, { tipBrendinga: e.target.value || undefined })}>
+                          <option value="">— bez tipa —</option>
+                          {TIP_OGLASA_GROUPS.map((g) => (
+                            <optgroup key={g.label} label={g.label}>
+                              {g.values.map((t) => (
+                                <option key={t} value={t}>{TIP_OGLASA_LABEL[t]?.replace(/^[A-Z]+ — /, "") ?? t}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </Select>
+                        {s.skicaUrl && skicaTipForItem !== null && (
+                          <a href={s.skicaUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-[10px] text-primary hover:underline">📐 Vidi {skicaTipForItem === "spoljna" ? "spoljnu" : "unutrašnju"} skicu</a>
+                        )}
+                      </td>
                       <td className="px-2 py-1"><Input value={s.opis} onChange={(e) => updateCell(i, { opis: e.target.value })} /></td>
                       <td className="px-2 py-1"><Input value={s.grad} onChange={(e) => updateCell(i, { grad: e.target.value })} /></td>
                       <td className="px-2 py-1"><Input type="number" value={s.brojVozila} onChange={(e) => updateCell(i, { brojVozila: Number(e.target.value) })} /></td>
@@ -177,9 +205,9 @@ export default function NovaPonudaPage() {
                 })}
               </tbody>
               <tfoot className="bg-secondary/20">
-                <tr><td colSpan={6} className="px-2 py-1.5 text-right text-sm">Podzbir</td><td className="px-2 py-1.5 text-right font-medium">{formatCurrency(podzbir, form.valuta)}</td><td></td></tr>
-                <tr><td colSpan={6} className="px-2 py-1.5 text-right text-sm">PDV {form.stopaPdv}%</td><td className="px-2 py-1.5 text-right">{formatCurrency(pdv, form.valuta)}</td><td></td></tr>
-                <tr className="border-t"><td colSpan={6} className="px-2 py-2 text-right font-bold">Ukupno sa PDV</td><td className="px-2 py-2 text-right font-bold">{formatCurrency(ukupno, form.valuta)}</td><td></td></tr>
+                <tr><td colSpan={7} className="px-2 py-1.5 text-right text-sm">Podzbir</td><td className="px-2 py-1.5 text-right font-medium">{formatCurrency(podzbir, form.valuta)}</td><td></td></tr>
+                <tr><td colSpan={7} className="px-2 py-1.5 text-right text-sm">PDV {form.stopaPdv}%</td><td className="px-2 py-1.5 text-right">{formatCurrency(pdv, form.valuta)}</td><td></td></tr>
+                <tr className="border-t"><td colSpan={7} className="px-2 py-2 text-right font-bold">Ukupno sa PDV</td><td className="px-2 py-2 text-right font-bold">{formatCurrency(ukupno, form.valuta)}</td><td></td></tr>
               </tfoot>
             </table>
           </div>
