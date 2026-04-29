@@ -14,16 +14,64 @@ const oppInput = z.object({
   kontaktId: z.string().cuid().optional(),
   vlasnikId: z.string().cuid(),
   stageKod: z.nativeEnum(StageKod).default(StageKod.NEW),
+  kategorijaId: z.string().cuid().optional(),
   probability: z.number().min(0).max(100).optional(),
   izvor: z.nativeEnum(OppIzvor).default(OppIzvor.OUTBOUND),
   valuta: z.string().length(3),
   expValue: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  potencijal: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  potencijalDoDatum: z.coerce.date().optional(),
   expCloseDate: z.coerce.date(),
+  realizacijaMesec: z.number().int().min(1).max(12).optional(),
+  realizacijaGodina: z.number().int().optional(),
   tags: z.array(z.string()).default([]),
   opis: z.string().optional(),
 });
 
 export const opportunitiesRouter = router({
+  // Progress prema godišnjem planu — za sve prilike u kategoriji + mesecu, koliko je realizovano (Won) i koliko je u pipeline-u
+  progressVsPlan: withPermission("opportunities", "READ").input(
+    z.object({ godina: z.number().int(), korisnikId: z.string().cuid().optional() }),
+  ).query(async ({ ctx, input }) => {
+    const tenantId = ctx.session!.tenantId;
+    const targetUser = input.korisnikId ?? ctx.session!.korisnikId;
+    const plan = await prisma.planRadaGodisnji.findFirst({
+      where: { pravnoLiceId: tenantId, korisnikId: targetUser, godina: input.godina },
+      include: { stavke: { include: { kategorija: true } } },
+    });
+    const opps = await prisma.opportunity.findMany({
+      where: {
+        pravnoLiceId: tenantId,
+        vlasnikId: targetUser,
+        OR: [
+          { realizacijaGodina: input.godina },
+          { realizacijaGodina: null, expCloseDate: { gte: new Date(input.godina, 0, 1), lt: new Date(input.godina + 1, 0, 1) } },
+        ],
+      },
+      include: { stage: true, kategorija: true },
+    });
+    // Aggregate per kategorija × mesec
+    const cells: Record<string, { target: number; realized: number; pipeline: number; weighted: number }> = {};
+    for (const s of plan?.stavke ?? []) {
+      const key = `${s.kategorijaId}:${s.mesec}`;
+      cells[key] = { target: Number(s.target), realized: 0, pipeline: 0, weighted: 0 };
+    }
+    for (const o of opps) {
+      const mesec = o.realizacijaMesec ?? new Date(o.expCloseDate).getMonth() + 1;
+      const kat = o.kategorijaId ?? "uncategorized";
+      const key = `${kat}:${mesec}`;
+      cells[key] ??= { target: 0, realized: 0, pipeline: 0, weighted: 0 };
+      const v = Number(o.expValue);
+      if (o.stage.kod === "WON") cells[key].realized += v;
+      if (!["WON", "LOST"].includes(o.stage.kod)) {
+        cells[key].pipeline += v;
+        cells[key].weighted += v * (o.probability / 100);
+      }
+    }
+    const kategorije = await prisma.kategorijaDelatnosti.findMany({ where: { pravnoLiceId: tenantId } });
+    return { plan, cells, kategorije };
+  }),
+
   list: withPermission("opportunities", "READ").input(
     z.object({
       stageKod: z.nativeEnum(StageKod).optional(),
@@ -78,11 +126,16 @@ export const opportunitiesRouter = router({
         kontaktId: input.kontaktId,
         vlasnikId: input.vlasnikId,
         stageId: stage.id,
+        kategorijaId: input.kategorijaId,
         probability: input.probability ?? stage.defaultProbability,
         izvor: input.izvor,
         valuta: input.valuta,
         expValue: input.expValue,
+        potencijal: input.potencijal,
+        potencijalDoDatum: input.potencijalDoDatum,
         expCloseDate: input.expCloseDate,
+        realizacijaMesec: input.realizacijaMesec ?? new Date(input.expCloseDate).getMonth() + 1,
+        realizacijaGodina: input.realizacijaGodina ?? new Date(input.expCloseDate).getFullYear(),
         tags: input.tags,
         opis: input.opis,
       },

@@ -93,6 +93,21 @@ export const vehiclesRouter = router({
     return v;
   }),
 
+  reservationsForVehicle: withPermission("vehicles", "READ").input(z.object({ id: z.string().cuid() })).query(async ({ ctx, input }) => {
+    const v = await prisma.vozilo.findUnique({ where: { id: input.id } });
+    if (!v) return [];
+    ensureTenant(ctx.session!, v.pravnoLiceId);
+    return prisma.rezervacija.findMany({
+      where: { pozicija: { voziloId: input.id } },
+      include: {
+        pozicija: true,
+        kampanja: { include: { partner: true } },
+        opportunity: { include: { partner: true } },
+      },
+      orderBy: { odDatum: "desc" },
+    });
+  }),
+
   create: withPermission("vehicles", "CREATE").input(z.object(vozilofields)).mutation(async ({ input, ctx }) => {
     const created = await prisma.vozilo.create({
       data: {

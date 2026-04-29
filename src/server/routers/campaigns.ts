@@ -7,6 +7,71 @@ import { AppError } from "../errors";
 import { KampanjaStatus, RezervacijaStatus } from "@prisma/client";
 
 export const campaignsRouter = router({
+  create: withPermission("campaigns", "CREATE").input(
+    z.object({
+      naziv: z.string().min(2),
+      partnerId: z.string().cuid(),
+      odDatum: z.coerce.date(),
+      doDatum: z.coerce.date(),
+      valuta: z.string().length(3),
+      opportunityId: z.string().cuid().optional(),
+      napomene: z.string().optional(),
+      stavke: z.array(z.object({
+        pozicijaId: z.string().cuid(),
+        odDatum: z.coerce.date(),
+        doDatum: z.coerce.date(),
+        cena: z.string(),
+      })).optional(),
+    }),
+  ).mutation(async ({ ctx, input }) => {
+    const partner = await prisma.partner.findUnique({ where: { id: input.partnerId } });
+    if (!partner) throw new AppError("NOT_FOUND", "Partner ne postoji");
+    ensureTenant(ctx.session!, partner.pravnoLiceId);
+
+    const created = await prisma.kampanja.create({
+      data: {
+        pravnoLiceId: ctx.session!.tenantId,
+        naziv: input.naziv,
+        partnerId: input.partnerId,
+        odDatum: input.odDatum,
+        doDatum: input.doDatum,
+        valuta: input.valuta,
+        opportunityId: input.opportunityId,
+        napomene: input.napomene,
+        status: KampanjaStatus.POTVRDENA,
+      },
+    });
+
+    if (input.stavke && input.stavke.length > 0) {
+      for (const s of input.stavke) {
+        // Konflikt check
+        const conflict = await prisma.rezervacija.findFirst({
+          where: {
+            pozicijaId: s.pozicijaId,
+            status: { in: [RezervacijaStatus.CONFIRMED, RezervacijaStatus.RUNNING, RezervacijaStatus.HOLD] },
+            odDatum: { lte: s.doDatum },
+            doDatum: { gte: s.odDatum },
+          },
+        });
+        if (conflict) continue; // skip ako je zauzeto
+        await prisma.$transaction([
+          prisma.kampanjaStavka.create({ data: { ...s, kampanjaId: created.id, valuta: input.valuta } }),
+          prisma.rezervacija.create({
+            data: {
+              pozicijaId: s.pozicijaId,
+              kampanjaId: created.id,
+              status: RezervacijaStatus.CONFIRMED,
+              odDatum: s.odDatum,
+              doDatum: s.doDatum,
+            },
+          }),
+        ]);
+      }
+    }
+    await audit({ ctx: ctx.session, entitet: "Kampanja", entitetId: created.id, akcija: "CREATE", diff: { naziv: input.naziv } });
+    return created;
+  }),
+
   list: withPermission("campaigns", "READ").input(
     z.object({ status: z.nativeEnum(KampanjaStatus).optional() }).optional(),
   ).query(async ({ ctx, input }) => {

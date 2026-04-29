@@ -278,11 +278,14 @@ model Opportunity {
   kontaktId         String?
   vlasnikId         String
   stageId           String
+  kategorijaId      String? // FK ka KategorijaDelatnosti — za vezu sa godišnjim planom
   probability       Int // override; default iz Stage
   izvor             OppIzvor  @default(OUTBOUND)
   tip               OppTip    @default(NEW)
   valuta            String
-  expValue          Decimal   @db.Decimal(12, 2)
+  expValue          Decimal   @db.Decimal(12, 2) // očekivana vrednost najbliže realizacije
+  potencijal        Decimal?  @db.Decimal(12, 2) // dugoročni novčani potencijal klijenta
+  potencijalDoDatum DateTime? // do kog datuma se realno može iskoristiti potencijal
   expCloseDate      DateTime
   realizacijaMesec  Int? // 1-12 za forecast
   realizacijaGodina Int?
@@ -296,11 +299,12 @@ model Opportunity {
   closedAt          DateTime?
   deletedAt         DateTime?
 
-  pravnoLice  PravnoLice    @relation(fields: [pravnoLiceId], references: [id])
-  partner     Partner       @relation(fields: [partnerId], references: [id])
-  vlasnik     Korisnik      @relation("OpportunityVlasnik", fields: [vlasnikId], references: [id])
-  stage       Stage         @relation(fields: [stageId], references: [id])
-  lostReason  LostReason?   @relation(fields: [lostReasonId], references: [id])
+  pravnoLice  PravnoLice            @relation(fields: [pravnoLiceId], references: [id])
+  partner     Partner               @relation(fields: [partnerId], references: [id])
+  vlasnik     Korisnik              @relation("OpportunityVlasnik", fields: [vlasnikId], references: [id])
+  stage       Stage                 @relation(fields: [stageId], references: [id])
+  lostReason  LostReason?           @relation(fields: [lostReasonId], references: [id])
+  kategorija  KategorijaDelatnosti? @relation(fields: [kategorijaId], references: [id])
   aktivnosti  Aktivnost[]
   kampanja    Kampanja?
   rezervacije Rezervacija[]
@@ -308,6 +312,7 @@ model Opportunity {
   @@index([pravnoLiceId, stageId])
   @@index([vlasnikId])
   @@index([expCloseDate])
+  @@index([kategorijaId])
 }
 
 enum OppIzvor {
@@ -806,6 +811,7 @@ model KategorijaDelatnosti {
   aktivna      Boolean @default(true)
 
   godisnjePlanStavke PlanRadaGodisnjiStavka[]
+  opportunities      Opportunity[]
 
   @@unique([pravnoLiceId, kod])
   @@index([pravnoLiceId])
