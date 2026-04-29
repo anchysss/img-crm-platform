@@ -96,6 +96,63 @@ export const dashboardRouter = router({
     };
   }),
 
+  // Aktivne + upcoming kampanje za Danas widget
+  campaignsOverview: withPermission("dashboard", "READ").query(async ({ ctx }) => {
+    const now = new Date();
+    const past30 = new Date(now.getTime() - 30 * 86400000);
+    const next90 = new Date(now.getTime() + 90 * 86400000);
+    const kampanje = await prisma.kampanja.findMany({
+      where: {
+        ...tenantWhere(ctx.session!),
+        deletedAt: null,
+        odDatum: { lte: next90 },
+        doDatum: { gte: past30 },
+      },
+      include: { partner: true },
+      orderBy: { odDatum: "asc" },
+      take: 50,
+    });
+    return kampanje.map((k) => ({
+      id: k.id,
+      naziv: k.naziv,
+      status: k.status,
+      partner: k.partner.naziv,
+      odDatum: k.odDatum,
+      doDatum: k.doDatum,
+      valuta: k.valuta,
+    }));
+  }),
+
+  // Aktivne + poslate ponude (DRAFT, POSLATA, PRIHVACENA)
+  ponudeOverview: withPermission("dashboard", "READ").query(async ({ ctx }) => {
+    const session = ctx.session!;
+    const isRep = hasRole(session, "SALES_REP");
+    const ponude = await prisma.ponuda.findMany({
+      where: {
+        ...tenantWhere(session),
+        ...(isRep ? { vlasnikId: session.korisnikId } : {}),
+        status: { in: ["DRAFT", "POSLATA", "PRIHVACENA"] },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    });
+    const partnerIds = Array.from(new Set(ponude.map((p) => p.partnerId)));
+    const partners = await prisma.partner.findMany({ where: { id: { in: partnerIds } }, select: { id: true, naziv: true } });
+    const partnerMap = new Map(partners.map((p) => [p.id, p.naziv]));
+    return ponude.map((p) => ({
+      id: p.id,
+      broj: p.broj,
+      status: p.status,
+      datum: p.datum,
+      vaziDo: p.vaziDo,
+      poslataAt: p.poslataAt,
+      ukupno: p.ukupno.toString(),
+      valuta: p.valuta,
+      partner: partnerMap.get(p.partnerId) ?? "—",
+      danaPoslata: p.poslataAt ? Math.floor((Date.now() - p.poslataAt.getTime()) / 86400000) : null,
+    }));
+  }),
+
   forecastAccuracy: withPermission("dashboard", "READ").query(async ({ ctx }) => {
     const now = new Date();
     const prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);

@@ -51,6 +51,9 @@ export default function KampanjePlanPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [prefill, setPrefill] = useState<{ pozicijaId?: string; odDatum?: Date; doDatum?: Date }>({});
 
+  // Drag-select state: anchor (pozicijaId + bucket) i trenutni hover end-bucket
+  const [drag, setDrag] = useState<null | { pozicijaId: string; startIdx: number; endIdx: number }>(null);
+
   useEffect(() => {
     setTo(isoDate(addDays(new Date(from), VIEW_DEFAULTS[view])));
   }, [view, from]);
@@ -59,6 +62,30 @@ export default function KampanjePlanPage() {
     from: new Date(from), to: new Date(to), grad: grad || undefined,
   });
   const buckets = useMemo(() => buildBuckets(new Date(from), new Date(to), view), [from, to, view]);
+
+  // Globalni mouseup — završava drag i otvara dialog ako je validan range
+  useEffect(() => {
+    function onUp() {
+      if (!drag) return;
+      const lo = Math.min(drag.startIdx, drag.endIdx);
+      const hi = Math.max(drag.startIdx, drag.endIdx);
+      const odBucket = buckets[lo];
+      const doBucket = buckets[hi];
+      if (odBucket && doBucket) {
+        const pozicija = (data ?? []).flatMap((v: any) => v.pozicije).find((p: any) => p.id === drag.pozicijaId);
+        if (pozicija) {
+          const allFree = buckets.slice(lo, hi + 1).every((b) => bucketStatus(pozicija.rezervacije, b) === null);
+          if (allFree) {
+            setPrefill({ pozicijaId: drag.pozicijaId, odDatum: odBucket.start, doDatum: doBucket.end });
+            setCreateOpen(true);
+          }
+        }
+      }
+      setDrag(null);
+    }
+    window.addEventListener("mouseup", onUp);
+    return () => window.removeEventListener("mouseup", onUp);
+  }, [drag, buckets, data]);
 
   function bucketStatus(rezs: any[], bucket: Bucket) {
     const overlapping = rezs.filter((r: any) => new Date(r.odDatum) <= bucket.end && new Date(r.doDatum) >= bucket.start);
@@ -90,7 +117,10 @@ export default function KampanjePlanPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-semibold">Kampanje plan</h1>
-          <p className="text-sm text-muted-foreground">Klikom na <span className="rounded bg-slot-free px-1.5 py-0.5 text-xs font-medium">slobodnu</span> ćeliju otvara se forma za kreiranje kampanje sa pre-popunjenom pozicijom i periodom.</p>
+          <p className="text-sm text-muted-foreground">
+            <strong>Klik</strong> na <span className="rounded bg-slot-free px-1.5 py-0.5 text-xs font-medium">slobodnu</span> ćeliju → kampanja na 1 jedinicu vremena.
+            {" "}<strong>Drag</strong> (mouseDown + povlačenje) preko više ćelija u istom redu → kampanja na ceo izabrani period.
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => { setPrefill({}); setCreateOpen(true); }}>+ Nova kampanja</Button>
@@ -128,18 +158,32 @@ export default function KampanjePlanPage() {
               )}
               {(data ?? []).map((v: any) =>
                 v.pozicije.map((p: any) => (
-                  <tr key={p.id} className="border-t">
+                  <tr key={p.id} className="border-t select-none">
                     <td className="sticky left-0 z-10 bg-background px-2 py-1 whitespace-nowrap">
                       <strong>{v.registracija}</strong> · {v.grad} · {p.tip}
                     </td>
-                    {buckets.map((b) => {
+                    {buckets.map((b, idx) => {
                       const rez = bucketStatus(p.rezervacije, b);
+                      const inDragRange =
+                        drag &&
+                        drag.pozicijaId === p.id &&
+                        idx >= Math.min(drag.startIdx, drag.endIdx) &&
+                        idx <= Math.max(drag.startIdx, drag.endIdx);
+                      const conflictInRange = inDragRange && rez !== null;
                       return (
                         <td
                           key={b.start.toISOString()}
-                          className={`h-6 ${cellWidth} ${bucketClass(rez)} transition-colors`}
-                          onClick={() => onCellClick(p.id, b, rez)}
-                          title={rez ? `${rez.status}: ${new Date(rez.odDatum).toLocaleDateString("sr-Latn")} → ${new Date(rez.doDatum).toLocaleDateString("sr-Latn")}` : `Klikni za novu kampanju (${b.label})`}
+                          className={`h-6 ${cellWidth} transition-colors ${inDragRange ? (conflictInRange ? "bg-red-400 ring-2 ring-red-600" : "bg-blue-400 ring-1 ring-blue-600") : bucketClass(rez)}`}
+                          onMouseDown={(e) => {
+                            if (rez) return;
+                            e.preventDefault();
+                            setDrag({ pozicijaId: p.id, startIdx: idx, endIdx: idx });
+                          }}
+                          onMouseEnter={() => {
+                            if (drag && drag.pozicijaId === p.id) setDrag({ ...drag, endIdx: idx });
+                          }}
+                          onClick={() => { if (!drag) onCellClick(p.id, b, rez); }}
+                          title={rez ? `${rez.status}: ${new Date(rez.odDatum).toLocaleDateString("sr-Latn")} → ${new Date(rez.doDatum).toLocaleDateString("sr-Latn")}` : `Klikni ili prevuci da izabereš period (${b.label})`}
                         />
                       );
                     })}
