@@ -22,6 +22,11 @@ import { radniNaloziRouter } from "./routers/radni-nalozi";
 import { planFakturisanjaRouter } from "./routers/plan-fakturisanja";
 import { importsRouter } from "./routers/imports";
 import { ponudeRouter } from "./routers/ponude";
+import { resenjaRouter } from "./routers/resenja";
+import { nalogMontazuRouter } from "./routers/nalog-montazu";
+import { nalogStampuRouter } from "./routers/nalog-stampu";
+import { fotoAlbumRouter } from "./routers/foto-album";
+import { postbrendingRouter } from "./routers/postbrending";
 
 export const appRouter = router({
   partners: partnersRouter,
@@ -47,6 +52,11 @@ export const appRouter = router({
   planFakturisanja: planFakturisanjaRouter,
   imports: importsRouter,
   ponude: ponudeRouter,
+  resenja: resenjaRouter,
+  nalogMontazu: nalogMontazuRouter,
+  nalogStampu: nalogStampuRouter,
+  fotoAlbum: fotoAlbumRouter,
+  postbrending: postbrendingRouter,
 });
 
 export type AppRouter = typeof appRouter;

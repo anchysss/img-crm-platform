@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc-client";
 import { Button } from "@/components/ui/button";
@@ -18,8 +18,23 @@ const STATUS_TONE: Record<string, any> = {
 
 export default function RadniNalogDetail() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { data, isLoading, refetch } = trpc.radniNalozi.byId.useQuery({ id });
   const setStatus = trpc.radniNalozi.setStatus.useMutation({ onSuccess: () => refetch() });
+
+  const createMontaza = trpc.nalogMontazu.create.useMutation({
+    onSuccess: (n: any) => router.push(`/logistika/nalog-montazu/${n.id}`),
+  });
+  const createStampa = trpc.nalogStampu.create.useMutation({
+    onSuccess: (n: any) => router.push(`/logistika/nalog-stampu/${n.id}`),
+  });
+  const createAlbum = trpc.fotoAlbum.create.useMutation({
+    onSuccess: (a: any) => router.push(`/logistika/foto-album/${a.id}`),
+  });
+  const createPostbrending = trpc.postbrending.create.useMutation({
+    onSuccess: () => refetch(),
+  });
+  const createResenje = trpc.resenja.create.useMutation({ onSuccess: () => refetch() });
 
   if (isLoading) return <p>Učitavam...</p>;
   if (!data) return <p>Radni nalog ne postoji.</p>;
@@ -38,6 +53,142 @@ export default function RadniNalogDetail() {
           {data.status === "PRIHVACEN_LOGISTIKA" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "PRIPREMA_MONTAZE" })}>U pripremi</Button>}
           {data.status === "PRIPREMA_MONTAZE" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "U_REALIZACIJI" })}>Pokreni realizaciju</Button>}
           {data.status === "U_REALIZACIJI" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "ZAVRSEN" })}>Završi</Button>}
+        </div>
+      </div>
+
+      {/* Logistika workflow panel (no-print) */}
+      <div className="no-print rounded-md border bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-semibold">Logistika workflow</h2>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => {
+              const oznaka = prompt("Oznaka rešenja (npr. R01)", `R0${(data.resenja?.length ?? 0) + 1}`);
+              if (!oznaka) return;
+              const procStr = prompt("Procenat raspodele (0-100)", "100");
+              if (procStr === null) return;
+              const naziv = prompt("Naziv kreative (opciono)", "") || undefined;
+              createResenje.mutate({ radniNalogId: id, oznaka, procenat: Number(procStr) || 100, naziv });
+            }}>+ Rešenje</Button>
+            <Button size="sm" variant="outline" onClick={() => {
+              const tip = (prompt("Tip naloga: BEOGRAD ili GRADOVI", "BEOGRAD") || "").toUpperCase();
+              if (tip !== "BEOGRAD" && tip !== "GRADOVI") return;
+              const grad = tip === "GRADOVI" ? (prompt("Grad", data.grad || "Novi Sad") || undefined) : undefined;
+              createMontaza.mutate({ radniNalogId: id, tip: tip as any, grad });
+            }}>+ Nalog za montažu</Button>
+            <Button size="sm" variant="outline" onClick={() => {
+              const stamparija = (prompt("Štamparija: DPC_BEOGRAD / STAMPARIJA_NIS / DRUGA", "DPC_BEOGRAD") || "").toUpperCase();
+              if (!["DPC_BEOGRAD","STAMPARIJA_NIS","DRUGA"].includes(stamparija)) return;
+              const today = new Date(); const rok = new Date(today); rok.setDate(rok.getDate() + 3);
+              createStampa.mutate({
+                radniNalogId: id,
+                stamparija: stamparija as any,
+                datumPredaje: today,
+                rokIzrade: rok,
+              });
+            }}>+ Nalog za štampu</Button>
+            <Button size="sm" variant="outline" onClick={() => {
+              const tip = (prompt("Tip albuma: MONTAZA / SAOBRACAJ / POSTBRANDING", "MONTAZA") || "").toUpperCase();
+              if (!["MONTAZA","SAOBRACAJ","POSTBRANDING"].includes(tip)) return;
+              const naziv = prompt("Naziv albuma", `${data.partner?.naziv || "Album"} — ${tip}`);
+              if (!naziv) return;
+              createAlbum.mutate({ radniNalogId: id, naziv, tip: tip as any });
+            }}>+ Foto album</Button>
+            <Button size="sm" variant="outline" onClick={() => {
+              if (!confirm("Kreirati postbrending izveštaj?")) return;
+              createPostbrending.mutate({ radniNalogId: id });
+            }}>+ Postbrending</Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {/* Resenja */}
+          <div className="rounded border p-3">
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">Rešenja ({data.resenja?.length ?? 0})</div>
+            {(!data.resenja || data.resenja.length === 0) ? (
+              <p className="text-xs text-muted-foreground">Nema rešenja. Dodaj R01 (npr. 50/50 ili 100%).</p>
+            ) : (
+              <ul className="space-y-1 text-xs">
+                {data.resenja.map((r: any) => (
+                  <li key={r.id} className="flex justify-between">
+                    <span><strong>{r.oznaka}</strong> — {r.naziv ?? "—"}</span>
+                    <span className="text-muted-foreground">{Number(r.procenat).toFixed(0)}%</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Nalozi za montažu */}
+          <div className="rounded border p-3">
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">Nalozi za montažu ({data.montaze?.length ?? 0})</div>
+            {(!data.montaze || data.montaze.length === 0) ? (
+              <p className="text-xs text-muted-foreground">Nema naloga.</p>
+            ) : (
+              <ul className="space-y-1 text-xs">
+                {data.montaze.map((n: any) => (
+                  <li key={n.id}>
+                    <Link href={`/logistika/nalog-montazu/${n.id}`} className="font-mono text-red-700 hover:underline">{n.broj}</Link>
+                    <span className="ml-2 text-muted-foreground">[{n.tip}{n.grad ? ` · ${n.grad}` : ""}] · {n._count?.stavke ?? 0} stavki · {n.status}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Nalozi za štampu */}
+          <div className="rounded border p-3">
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">Nalozi za štampu ({data.stampe?.length ?? 0})</div>
+            {(!data.stampe || data.stampe.length === 0) ? (
+              <p className="text-xs text-muted-foreground">Nema naloga.</p>
+            ) : (
+              <ul className="space-y-1 text-xs">
+                {data.stampe.map((n: any) => (
+                  <li key={n.id}>
+                    <Link href={`/logistika/nalog-stampu/${n.id}`} className="font-mono text-red-700 hover:underline">{n.broj}</Link>
+                    <span className="ml-2 text-muted-foreground">[{n.stamparija}] · {n._count?.stavke ?? 0} stavki · {n.status}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Foto albumi */}
+          <div className="rounded border p-3">
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">Foto albumi ({data.albumi?.length ?? 0})</div>
+            {(!data.albumi || data.albumi.length === 0) ? (
+              <p className="text-xs text-muted-foreground">Nema albuma.</p>
+            ) : (
+              <ul className="space-y-1 text-xs">
+                {data.albumi.map((a: any) => (
+                  <li key={a.id}>
+                    <Link href={`/logistika/foto-album/${a.id}`} className="text-red-700 hover:underline">{a.naziv}</Link>
+                    <span className="ml-2 text-muted-foreground">[{a.tip}] · {a._count?.fotografije ?? 0} fotografija</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Postbrending */}
+          <div className="rounded border p-3 md:col-span-2 lg:col-span-2">
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">Postbrending izveštaji ({data.postbrendinzi?.length ?? 0})</div>
+            {(!data.postbrendinzi || data.postbrendinzi.length === 0) ? (
+              <p className="text-xs text-muted-foreground">Nema izveštaja.</p>
+            ) : (
+              <ul className="space-y-1 text-xs">
+                {data.postbrendinzi.map((p: any) => (
+                  <li key={p.id} className="flex justify-between">
+                    <span className="font-mono">{p.broj}</span>
+                    <span className="text-muted-foreground">
+                      {formatDate(p.datum)}
+                      {p.poslatoAt ? ` · ✉️ poslato ${formatDate(p.poslatoAt)}` : " · nacrt"}
+                      {p.pdfUrl ? <> · <a href={p.pdfUrl} target="_blank" rel="noreferrer" className="text-red-700 hover:underline">PDF</a></> : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       </div>
 

@@ -417,11 +417,12 @@ model Vozilo {
   updatedAt               DateTime     @updatedAt
   deletedAt               DateTime?
 
-  pravnoLice       PravnoLice         @relation(fields: [pravnoLiceId], references: [id])
-  pozicije         Pozicija[]
-  komunalneNaknade KomunalnaNaknada[]
-  ceneZakupa       VoziloCenaZakupa[]
-  ponudaStavke     PonudaStavka[]
+  pravnoLice         PravnoLice           @relation(fields: [pravnoLiceId], references: [id])
+  pozicije           Pozicija[]
+  komunalneNaknade   KomunalnaNaknada[]
+  ceneZakupa         VoziloCenaZakupa[]
+  ponudaStavke       PonudaStavka[]
+  NalogMontazuStavka NalogMontazuStavka[]
 
   @@unique([pravnoLiceId, registracija])
   @@index([grad])
@@ -983,22 +984,31 @@ model PlanRadaDnevni {
 // =============================================================
 
 model RadniNalog {
-  id               String           @id @default(cuid())
-  pravnoLiceId     String
-  broj             String
-  opportunityId    String?          @unique
-  kampanjaId       String?          @unique
-  partnerId        String
-  vlasnikProdajaId String // prodavac koji je zatvorio
-  logistikaId      String? // trenutno zaduženi u logistici
-  status           RadniNalogStatus @default(NOVO)
-  odDatum          DateTime
-  doDatum          DateTime
-  grad             String?
-  napomena         String?
-  kreativaUrl      String?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  id                String           @id @default(cuid())
+  pravnoLiceId      String
+  broj              String
+  opportunityId     String?          @unique
+  kampanjaId        String?          @unique
+  partnerId         String
+  vlasnikProdajaId  String
+  logistikaId       String?
+  status            RadniNalogStatus @default(NOVO)
+  odDatum           DateTime
+  doDatum           DateTime
+  grad              String?
+  predlogLinija     String? // npr "TROLAx3; KT4x3; CAFx3; 16, 17, 18, 23x2..."
+  brojVozilaPoGradu Json? // {"Beograd": 30, "Niš": 5, ...}
+  napomena          String?
+  kreativaUrl       String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  // Logistika workflow djeca
+  nalogMontazu  NalogMontazu[]
+  nalogStampu   NalogStampu[]
+  resenja       Resenje[]
+  fotoAlbumi    FotoAlbum[]
+  postbrendinzi Postbrending[]
 
   @@unique([pravnoLiceId, broj])
   @@index([pravnoLiceId, status])
@@ -1006,12 +1016,242 @@ model RadniNalog {
 }
 
 enum RadniNalogStatus {
-  NOVO // tek kreiran iz WON
-  PRIHVACEN_LOGISTIKA // logistika potvrdila
+  NOVO
+  PRIHVACEN_LOGISTIKA
   PRIPREMA_MONTAZE
   U_REALIZACIJI
   ZAVRSEN
   OTKAZAN
+}
+
+// =============================================================
+// Logistika workflow: Rešenja, Nalog za Montažu, Nalog za Štampu, Foto, Postbrending
+// =============================================================
+
+// Rešenja (R01, R02, R03 sa raspodelom %)
+model Resenje {
+  id           String  @id @default(cuid())
+  radniNalogId String
+  oznaka       String // "R01", "R02", "R03"
+  naziv        String? // opciono ime kreative
+  procenat     Decimal @default("100") @db.Decimal(5, 2) // npr 50 za 50%
+  napomena     String?
+
+  radniNalog    RadniNalog           @relation(fields: [radniNalogId], references: [id], onDelete: Cascade)
+  montazaStavke NalogMontazuStavka[]
+  stampaStavke  NalogStampuStavka[]
+
+  @@unique([radniNalogId, oznaka])
+  @@index([radniNalogId])
+}
+
+// Nalog za Montažu — Beograd ili Gradovi
+model NalogMontazu {
+  id           String            @id @default(cuid())
+  pravnoLiceId String
+  radniNalogId String
+  broj         String // 317-TELENOR-MONTAZA-BG
+  tip          NalogMontazuTip
+  grad         String? // za GRADOVI: konkretan grad
+  ekipa        String?
+  datumMontaze DateTime?
+  status       NalogStavkaStatus @default(NACRT)
+  napomena     String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  radniNalog RadniNalog           @relation(fields: [radniNalogId], references: [id], onDelete: Cascade)
+  stavke     NalogMontazuStavka[]
+
+  @@unique([pravnoLiceId, broj])
+  @@index([radniNalogId])
+}
+
+enum NalogMontazuTip {
+  BEOGRAD
+  GRADOVI
+}
+
+enum NalogStavkaStatus {
+  NACRT
+  POSLATO
+  POSTAVLJENO
+  PROBLEM
+  OTKAZANO
+}
+
+// Stavka u nalogu za montažu — konkretan vozilo + raspored plakata
+model NalogMontazuStavka {
+  id             String            @id @default(cuid())
+  nalogId        String
+  voziloId       String?
+  garazniBroj    String? // ako vozilo nije u sistemu
+  garaza         String? // GSP Centrala / Dorćol / Karaburma...
+  linija         String? // 16, 56, slob...
+  tipVozila      String? // Solaris / KT4 / CAF...
+  resenjeId      String?
+  // Raspored plakata: npr "1+8" (1 iza vozača + 8 kosina), "7" (7 vertikala KT4)
+  sifraRasporeda String?
+  // Brojevi panoa po dimenziji (Json — fleksibilno)
+  brojPanoa      Json? // {"46x80 folija": 1, "79x37 folija": 8, "47x77 sv": 5}
+  status         NalogStavkaStatus @default(NACRT)
+  postavljenoAt  DateTime?
+  napomena       String?
+  problemTip     String? // "autobus nije došao", "zaključan", "farbanje"...
+
+  nalog   NalogMontazu @relation(fields: [nalogId], references: [id], onDelete: Cascade)
+  vozilo  Vozilo?      @relation(fields: [voziloId], references: [id])
+  resenje Resenje?     @relation(fields: [resenjeId], references: [id])
+
+  @@index([nalogId])
+  @@index([voziloId])
+}
+
+// Nalog za Štampu — DPC Beograd ili Niš/druge štamparije
+model NalogStampu {
+  id            String            @id @default(cuid())
+  pravnoLiceId  String
+  radniNalogId  String
+  broj          String
+  stamparija    StamparijaTip
+  datumPredaje  DateTime
+  rokIzrade     DateTime
+  rokIzradeTime String? // "DO 14H"
+  masina        String? // HP / XEIKON / DRUGO
+  status        NalogStavkaStatus @default(NACRT)
+  napomena      String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  radniNalog RadniNalog          @relation(fields: [radniNalogId], references: [id], onDelete: Cascade)
+  stavke     NalogStampuStavka[]
+
+  @@unique([pravnoLiceId, broj])
+  @@index([radniNalogId])
+}
+
+enum StamparijaTip {
+  DPC_BEOGRAD
+  STAMPARIJA_NIS
+  DRUGA
+}
+
+enum MaterijalTip {
+  FOLIJA_3M_IJ20
+  PAPIR_130GR
+  PAPIR_SV // svetleci
+  PAPIR_DUPLEKS
+  DRUGO
+}
+
+model NalogStampuStavka {
+  id            String       @id @default(cuid())
+  nalogId       String
+  grad          String // BG / NS / NI / KG / SU...
+  resenjeId     String?
+  resenjeOznaka String? // "R01" ako resenje nije FK
+  simpleks      Boolean      @default(true) // true = simpleks, false = dupleks
+  format        String // "46x80 ram", "79x37 sv", "47X77 sv"
+  tiraz         Int
+  materijal     MaterijalTip
+  gramatura     String? // "130gr", "3M IJ 20"
+  dorada        String? // "secenje na format", "BEZ LAMINACIJE"
+  cenaJedinicna Decimal?     @db.Decimal(10, 2)
+  cenaUkupno    Decimal?     @db.Decimal(12, 2)
+  napomena      String?
+
+  nalog   NalogStampu @relation(fields: [nalogId], references: [id], onDelete: Cascade)
+  resenje Resenje?    @relation(fields: [resenjeId], references: [id])
+
+  @@index([nalogId])
+}
+
+// Cenovnik štampe (za auto-cost calculation pri kreiranju Naloga za Štampu)
+model StamparijaCenovnik {
+  id           String        @id @default(cuid())
+  pravnoLiceId String
+  stamparija   StamparijaTip
+  format       String
+  materijal    MaterijalTip
+  cena         Decimal       @db.Decimal(10, 2)
+  valuta       String
+  vaziOd       DateTime      @default(now())
+  vaziDo       DateTime?
+  aktivan      Boolean       @default(true)
+
+  @@index([pravnoLiceId, stamparija, format, materijal])
+}
+
+// Foto album — montaža + saobraćaj
+model FotoAlbum {
+  id           String       @id @default(cuid())
+  pravnoLiceId String
+  radniNalogId String
+  naziv        String // "TELENOR — montaža BG", "TELENOR — saobraćaj"
+  tip          FotoAlbumTip
+  pdfUrl       String? // generisan PDF sa watermarkom
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  radniNalog  RadniNalog    @relation(fields: [radniNalogId], references: [id], onDelete: Cascade)
+  fotografije Fotografija[]
+
+  @@index([radniNalogId])
+}
+
+enum FotoAlbumTip {
+  MONTAZA
+  SAOBRACAJ
+  POSTBRANDING
+}
+
+model Fotografija {
+  id        String   @id @default(cuid())
+  albumId   String
+  url       String
+  naziv     String?
+  redosled  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  album FotoAlbum @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  @@index([albumId])
+}
+
+// Postbrending — izveštaj klijentu po završenoj montaži
+model Postbrending {
+  id           String    @id @default(cuid())
+  pravnoLiceId String
+  radniNalogId String
+  broj         String
+  datum        DateTime  @default(now())
+  fotoAlbumId  String?
+  pdfUrl       String?
+  poslatoAt    DateTime?
+  napomena     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  radniNalog RadniNalog @relation(fields: [radniNalogId], references: [id], onDelete: Cascade)
+
+  @@unique([pravnoLiceId, broj])
+  @@index([radniNalogId])
+}
+
+// Default raspored plakata po tipu vozila (referenca za auto-popunjavanje montaža stavki)
+model RasporedPlakata {
+  id             String  @id @default(cuid())
+  pravnoLiceId   String
+  voziloTipKod   String // "SOLARIS_ZGLOBNI", "KT4", "CAF", "TROLEJBUS_321", "AUTOBUS_SOLO"
+  naziv          String
+  sifraRasporeda String // "1+8", "7", "1+10+8"
+  // Po dimenzijama (npr [{format: "46x80", broj: 1, tip: "FOLIJA"}, ...])
+  panoi          Json
+  ukupnoPovrsina Int
+  napomena       String?
+
+  @@unique([pravnoLiceId, voziloTipKod])
+  @@index([pravnoLiceId])
 }
 
 // =============================================================

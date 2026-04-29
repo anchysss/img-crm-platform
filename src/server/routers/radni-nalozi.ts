@@ -21,12 +21,29 @@ export const radniNaloziRouter = router({
     const rn = await prisma.radniNalog.findUnique({ where: { id: input.id } });
     if (!rn) return null;
     ensureTenant(ctx.session!, rn.pravnoLiceId);
-    const [partner, vlasnik, opp] = await Promise.all([
+    const [partner, vlasnik, opp, resenja, montaze, stampe, albumi, postbrendinzi] = await Promise.all([
       prisma.partner.findUnique({ where: { id: rn.partnerId } }),
       prisma.korisnik.findUnique({ where: { id: rn.vlasnikProdajaId } }),
       rn.opportunityId ? prisma.opportunity.findUnique({ where: { id: rn.opportunityId } }) : null,
+      prisma.resenje.findMany({ where: { radniNalogId: input.id }, orderBy: { oznaka: "asc" } }),
+      prisma.nalogMontazu.findMany({
+        where: { radniNalogId: input.id },
+        orderBy: { createdAt: "desc" },
+        include: { _count: { select: { stavke: true } } },
+      }),
+      prisma.nalogStampu.findMany({
+        where: { radniNalogId: input.id },
+        orderBy: { createdAt: "desc" },
+        include: { _count: { select: { stavke: true } } },
+      }),
+      prisma.fotoAlbum.findMany({
+        where: { radniNalogId: input.id },
+        orderBy: { createdAt: "desc" },
+        include: { _count: { select: { fotografije: true } } },
+      }),
+      prisma.postbrending.findMany({ where: { radniNalogId: input.id }, orderBy: { datum: "desc" } }),
     ]);
-    return { ...rn, partner, vlasnik, opportunity: opp };
+    return { ...rn, partner, vlasnik, opportunity: opp, resenja, montaze, stampe, albumi, postbrendinzi };
   }),
 
   setStatus: withPermission("campaigns", "UPDATE").input(
