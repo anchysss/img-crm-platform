@@ -187,6 +187,97 @@ export const reportsRouter = router({
     });
   }),
 
+  // KPI po prodavcu — PZ Faze 1: # sastanaka, # poziva, # ponuda, # won, ukupna vrednost, pipeline 90d
+  individualKpis: withPermission("reports", "READ").input(
+    z.object({ od: z.coerce.date().optional(), do: z.coerce.date().optional() }).optional(),
+  ).query(async ({ ctx, input }) => {
+    const od = input?.od ?? new Date(Date.now() - 90 * 86400000);
+    const dod = input?.do ?? new Date();
+    const next90 = new Date(Date.now() + 90 * 86400000);
+    const tenant = ctx.session!.tenantId;
+
+    const reps = await prisma.korisnik.findMany({
+      where: {
+        deletedAt: null,
+        aktivan: true,
+        roles: { some: { pravnoLiceId: tenant, rola: { kod: { in: ["SALES_REP", "SALES_MANAGER", "COUNTRY_MANAGER"] as any } } } },
+      },
+    });
+
+    const rows = await Promise.all(reps.map(async (u) => {
+      const [sastanci, pozivi, mailovi, followups, ponudePoslate, won, opps] = await Promise.all([
+        prisma.aktivnost.count({ where: { autorId: u.id, tip: "SASTANAK", datum: { gte: od, lte: dod } } }),
+        prisma.aktivnost.count({ where: { autorId: u.id, tip: "POZIV", datum: { gte: od, lte: dod } } }),
+        prisma.aktivnost.count({ where: { autorId: u.id, tip: "MAIL", datum: { gte: od, lte: dod } } }),
+        prisma.aktivnost.count({ where: { autorId: u.id, tip: "FOLLOW_UP", datum: { gte: od, lte: dod } } }),
+        prisma.ponuda.count({ where: { vlasnikId: u.id, poslataAt: { gte: od, lte: dod } } }),
+        prisma.opportunity.findMany({
+          where: { vlasnikId: u.id, stage: { kod: "WON" }, closedAt: { gte: od, lte: dod } },
+          select: { expValue: true },
+        }),
+        prisma.opportunity.findMany({
+          where: { vlasnikId: u.id, deletedAt: null, expCloseDate: { gte: new Date(), lte: next90 }, stage: { kod: { notIn: ["WON", "LOST"] } } },
+          select: { expValue: true, probability: true },
+        }),
+      ]);
+      const wonValue = won.reduce((a, o) => a + Number(o.expValue), 0);
+      const pipeline90 = opps.reduce((a, o) => a + Number(o.expValue), 0);
+      const weighted90 = opps.reduce((a, o) => a + Number(o.expValue) * (o.probability / 100), 0);
+      return {
+        korisnikId: u.id,
+        ime: `${u.ime} ${u.prezime}`,
+        sastanci, pozivi, mailovi, followups,
+        ponudePoslate,
+        wonBroj: won.length,
+        wonValue,
+        pipeline90,
+        weighted90,
+      };
+    }));
+    return rows.sort((a, b) => b.wonValue - a.wonValue);
+  }),
+
+  // Team KPI: ukupna realizacija + weighted forecast + coverage + broj novih klijenata
+  teamKpis: withPermission("reports", "READ").input(
+    z.object({ od: z.coerce.date().optional(), do: z.coerce.date().optional() }).optional(),
+  ).query(async ({ ctx, input }) => {
+    const od = input?.od ?? new Date(Date.now() - 90 * 86400000);
+    const dod = input?.do ?? new Date();
+    const next90 = new Date(Date.now() + 90 * 86400000);
+    const tenantId = ctx.session!.tenantId;
+
+    const [won, openOpps, noviPartneri, planoviGodisnji] = await Promise.all([
+      prisma.opportunity.findMany({
+        where: { pravnoLiceId: tenantId, stage: { kod: "WON" }, closedAt: { gte: od, lte: dod } },
+        select: { expValue: true, vlasnikId: true },
+      }),
+      prisma.opportunity.findMany({
+        where: { pravnoLiceId: tenantId, deletedAt: null, expCloseDate: { lte: next90 }, stage: { kod: { notIn: ["WON", "LOST"] } } },
+        select: { expValue: true, probability: true },
+      }),
+      prisma.partner.count({ where: { pravnoLiceId: tenantId, createdAt: { gte: od, lte: dod }, deletedAt: null } }),
+      prisma.planRadaGodisnji.findMany({
+        where: { pravnoLiceId: tenantId, godina: new Date().getFullYear() },
+        include: { stavke: { where: { mesec: new Date().getMonth() + 1 } } },
+      }),
+    ]);
+
+    const realized = won.reduce((a, o) => a + Number(o.expValue), 0);
+    const weightedForecast = openOpps.reduce((a, o) => a + Number(o.expValue) * (o.probability / 100), 0);
+    const monthlyTarget = planoviGodisnji.reduce((a, p) => a + p.stavke.reduce((b, s) => b + Number(s.target), 0), 0);
+    const coverageRatio = monthlyTarget > 0 ? Math.round((weightedForecast / monthlyTarget) * 100) : 0;
+
+    return {
+      realized,
+      weightedForecast,
+      coverageRatio,
+      monthlyTarget,
+      noviKlijenti: noviPartneri,
+      brojWonDeals: won.length,
+      brojOpenOpps: openOpps.length,
+    };
+  }),
+
   // Sixmonth triger — kampanje koje su završene pre 6 meseci a partner nema novu
   sixMonthsSinceCampaign: withPermission("partners", "READ").query(async ({ ctx }) => {
     const cutoff = new Date(Date.now() - 180 * 86400000);

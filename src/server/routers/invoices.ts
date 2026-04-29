@@ -54,6 +54,8 @@ export const invoicesRouter = router({
       tip: z.nativeEnum(DokumentTip),
       partnerId: z.string().cuid(),
       kampanjaId: z.string().cuid().optional(),
+      ponudaId: z.string().cuid().optional(),
+      opportunityId: z.string().cuid().optional(),
       datum: z.coerce.date(),
       rokPlacanja: z.coerce.date().optional(),
       valuta: z.string().length(3),
@@ -65,6 +67,10 @@ export const invoicesRouter = router({
     const partner = await prisma.partner.findUnique({ where: { id: input.partnerId } });
     if (!partner) throw new AppError("NOT_FOUND", "Partner ne postoji");
     ensureTenant(ctx.session!, partner.pravnoLiceId);
+
+    // PZ Faze 1: "nema izgubljenih para" — ako je ovo FAKTURA (ne predračun ili avans), ohrabri vezu.
+    // Ne odbijamo (mogu biti edge case-i), ali audit-ujemo nedostatak veze.
+    const linkInfo = (input.ponudaId || input.opportunityId || input.kampanjaId) ? "linked" : "unlinked";
 
     const broj = await generateInvoiceNumber(ctx.session!.tenantId, input.tip, input.datum.getFullYear());
 
@@ -78,6 +84,13 @@ export const invoicesRouter = router({
     const pdv = (podzbir * input.stopaPdv) / 100;
     const ukupno = podzbir + pdv;
 
+    // Auto-resolve opportunityId iz ponude ako nije eksplicitno
+    let resolvedOppId = input.opportunityId;
+    if (!resolvedOppId && input.ponudaId) {
+      const ponuda = await prisma.ponuda.findUnique({ where: { id: input.ponudaId } });
+      resolvedOppId = ponuda?.opportunityId ?? undefined;
+    }
+
     const created = await prisma.dokument.create({
       data: {
         pravnoLiceId: ctx.session!.tenantId,
@@ -87,6 +100,8 @@ export const invoicesRouter = router({
         rokPlacanja: input.rokPlacanja,
         partnerId: input.partnerId,
         kampanjaId: input.kampanjaId,
+        ponudaId: input.ponudaId,
+        opportunityId: resolvedOppId,
         podzbir: podzbir.toFixed(2),
         pdv: pdv.toFixed(2),
         ukupno: ukupno.toFixed(2),
@@ -96,7 +111,7 @@ export const invoicesRouter = router({
       },
       include: { stavke: true },
     });
-    await audit({ ctx: ctx.session, entitet: "Dokument", entitetId: created.id, akcija: "INVOICE_GENERATE", diff: { tip: input.tip, broj } });
+    await audit({ ctx: ctx.session, entitet: "Dokument", entitetId: created.id, akcija: "INVOICE_GENERATE", diff: { tip: input.tip, broj, linkInfo } });
     return created;
   }),
 

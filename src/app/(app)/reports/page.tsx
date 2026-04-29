@@ -20,6 +20,8 @@ export default function ReportsPage() {
   const cashFlow = trpc.reports.cashFlow.useQuery();
   const reactivation = trpc.reports.reactivationList.useQuery();
   const sixMo = trpc.reports.sixMonthsSinceCampaign.useQuery();
+  const individualKpis = trpc.reports.individualKpis.useQuery();
+  const teamKpis = trpc.reports.teamKpis.useQuery();
 
   const [util, setUtil] = useState({
     from: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10),
@@ -30,6 +32,66 @@ export default function ReportsPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Izveštaji</h1>
+
+      <Report
+        title="Tim KPI (poslednjih 90 dana)"
+        onExportCsv={() => teamKpis.data && downloadCsv("team-kpi.csv", [teamKpis.data])}
+        onExportXlsx={() => teamKpis.data && downloadXlsx("team-kpi.xlsx", "Team KPI", [teamKpis.data])}
+      >
+        {teamKpis.data && (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Stat label="Realizovano" value={formatCurrency(teamKpis.data.realized, "EUR")} tone="emerald" />
+            <Stat label="Weighted forecast" value={formatCurrency(teamKpis.data.weightedForecast, "EUR")} />
+            <Stat label="Coverage ratio" value={`${teamKpis.data.coverageRatio}%`} hint={`target ${formatCurrency(teamKpis.data.monthlyTarget, "EUR")}`} />
+            <Stat label="Novi klijenti" value={String(teamKpis.data.noviKlijenti)} tone="emerald" />
+            <Stat label="Won deals" value={String(teamKpis.data.brojWonDeals)} />
+            <Stat label="Otvorene prilike" value={String(teamKpis.data.brojOpenOpps)} />
+          </div>
+        )}
+      </Report>
+
+      <Report
+        title="Individualni KPI po prodavcu (90d)"
+        onExportCsv={() => individualKpis.data && downloadCsv("individual-kpi.csv", individualKpis.data as any)}
+        onExportXlsx={() => individualKpis.data && downloadXlsx("individual-kpi.xlsx", "KPI", individualKpis.data as any)}
+      >
+        {individualKpis.data && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-secondary/60 text-left">
+                <tr>
+                  <th className="px-2 py-2">Prodavac</th>
+                  <th className="px-2 py-2 text-right">📞 Pozivi</th>
+                  <th className="px-2 py-2 text-right">🤝 Sastanci</th>
+                  <th className="px-2 py-2 text-right">✉️ Mailovi</th>
+                  <th className="px-2 py-2 text-right">⏭ Follow-ups</th>
+                  <th className="px-2 py-2 text-right">📄 Ponuda poslate</th>
+                  <th className="px-2 py-2 text-right">✓ Won</th>
+                  <th className="px-2 py-2 text-right">Vrednost won</th>
+                  <th className="px-2 py-2 text-right">Pipeline 90d</th>
+                  <th className="px-2 py-2 text-right">Weighted 90d</th>
+                </tr>
+              </thead>
+              <tbody>
+                {individualKpis.data.map((r: any) => (
+                  <tr key={r.korisnikId} className="border-t">
+                    <td className="px-2 py-1.5 font-medium">{r.ime}</td>
+                    <td className="px-2 py-1.5 text-right">{r.pozivi}</td>
+                    <td className="px-2 py-1.5 text-right">{r.sastanci}</td>
+                    <td className="px-2 py-1.5 text-right">{r.mailovi}</td>
+                    <td className="px-2 py-1.5 text-right">{r.followups}</td>
+                    <td className="px-2 py-1.5 text-right">{r.ponudePoslate}</td>
+                    <td className="px-2 py-1.5 text-right">{r.wonBroj}</td>
+                    <td className="px-2 py-1.5 text-right font-medium text-emerald-700">{formatCurrency(r.wonValue, "EUR")}</td>
+                    <td className="px-2 py-1.5 text-right">{formatCurrency(r.pipeline90, "EUR")}</td>
+                    <td className="px-2 py-1.5 text-right">{formatCurrency(r.weighted90, "EUR")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Report>
 
       <Report
         title="Pipeline funnel (trenutno)"
@@ -277,12 +339,13 @@ function Report({ title, onExportCsv, onExportXlsx, children }: { title: string;
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: "emerald" | "red" }) {
+function Stat({ label, value, tone, hint }: { label: string; value: string; tone?: "emerald" | "red"; hint?: string }) {
   const cls = tone === "emerald" ? "text-emerald-600" : tone === "red" ? "text-red-600" : "";
   return (
     <div className="rounded-md border bg-card p-3">
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className={`mt-1 text-xl font-semibold ${cls}`}>{value}</div>
+      {hint && <div className="text-[10px] text-muted-foreground">{hint}</div>}
     </div>
   );
 }

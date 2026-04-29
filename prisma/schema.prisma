@@ -261,6 +261,7 @@ enum AktivnostTip {
   POZIV
   SASTANAK
   MAIL
+  FOLLOW_UP
   PONUDA
   POSETA
   OSTALO
@@ -308,6 +309,7 @@ model Opportunity {
   aktivnosti  Aktivnost[]
   kampanja    Kampanja?
   rezervacije Rezervacija[]
+  dokumenti   Dokument[]
 
   @@index([pravnoLiceId, stageId])
   @@index([vlasnikId])
@@ -573,27 +575,32 @@ model KampanjaStavka {
 // =============================================================
 
 model Dokument {
-  id           String         @id @default(cuid())
-  pravnoLiceId String
-  tip          DokumentTip
-  broj         String
-  datum        DateTime
-  rokPlacanja  DateTime?
-  partnerId    String
-  kampanjaId   String?
-  podzbir      Decimal        @db.Decimal(12, 2)
-  pdv          Decimal        @db.Decimal(12, 2)
-  ukupno       Decimal        @db.Decimal(12, 2)
-  valuta       String
-  napomene     String?
-  status       DokumentStatus @default(OTVOREN)
-  stornoOdId   String?        @unique
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id            String         @id @default(cuid())
+  pravnoLiceId  String
+  tip           DokumentTip
+  broj          String
+  datum         DateTime
+  rokPlacanja   DateTime?
+  partnerId     String
+  kampanjaId    String?
+  ponudaId      String? // PZ Faze 1: "nema izgubljenih para" — svaki prihod ima vezu sa Ponudom
+  opportunityId String? // i sa prilikom (Opportunity)
+  podzbir       Decimal        @db.Decimal(12, 2)
+  pdv           Decimal        @db.Decimal(12, 2)
+  ukupno        Decimal        @db.Decimal(12, 2)
+  valuta        String
+  napomene      String?
+  status        DokumentStatus @default(OTVOREN)
+  placenoAt     DateTime? // datum kad je naplaćen
+  stornoOdId    String?        @unique
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   pravnoLice    PravnoLice       @relation(fields: [pravnoLiceId], references: [id])
   partner       Partner          @relation(fields: [partnerId], references: [id])
   kampanja      Kampanja?        @relation(fields: [kampanjaId], references: [id])
+  ponuda        Ponuda?          @relation(fields: [ponudaId], references: [id])
+  opportunity   Opportunity?     @relation(fields: [opportunityId], references: [id])
   stavke        DokumentStavka[]
   handoffZapisi HandoffZapis[]
   stornoOd      Dokument?        @relation("DokumentStorno", fields: [stornoOdId], references: [id])
@@ -1024,11 +1031,13 @@ model Ponuda {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
-  stavke PonudaStavka[]
+  stavke    PonudaStavka[]
+  dokumenti Dokument[]
 
   @@unique([pravnoLiceId, broj])
   @@index([partnerId])
   @@index([pravnoLiceId, status])
+  @@index([vaziDo])
 }
 
 enum PonudaStatus {

@@ -22,7 +22,9 @@
     "job:stale-opps": "tsx scripts/jobs/notify-stale-opportunities.ts",
     "job:communal-expiring": "tsx scripts/jobs/notify-communal-expiring.ts",
     "job:release-holds": "tsx scripts/jobs/release-expired-holds.ts",
-    "job:advance-campaigns": "tsx scripts/jobs/advance-campaign-status.ts"
+    "job:advance-campaigns": "tsx scripts/jobs/advance-campaign-status.ts",
+    "job:stale-ponude": "tsx scripts/jobs/notify-stale-ponude.ts",
+    "job:expiring-ponude": "tsx scripts/jobs/notify-expiring-ponude.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -38,6 +40,7 @@
     "@trpc/client": "^11.0.0-rc.553",
     "@trpc/react-query": "^11.0.0-rc.553",
     "@trpc/server": "^11.0.0-rc.553",
+    "@types/nodemailer": "^8.0.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -46,6 +49,7 @@
     "next": "^14.2.15",
     "next-auth": "^4.24.8",
     "next-intl": "^3.20.0",
+    "nodemailer": "^7.0.13",
     "otplib": "^12.0.1",
     "pino": "^9.4.0",
     "qrcode": "^1.5.4",

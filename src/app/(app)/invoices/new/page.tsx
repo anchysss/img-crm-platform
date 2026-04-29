@@ -14,8 +14,10 @@ export default function NewInvoicePage() {
   const qs = useSearchParams();
   const kampanjaIdParam = qs.get("kampanjaId");
 
+  const ponudaIdParam = qs.get("ponudaId");
   const partners = trpc.lookups.partnersShort.useQuery();
   const campaigns = trpc.campaigns.list.useQuery();
+  const ponude = trpc.ponude.list.useQuery({ status: "PRIHVACENA" as any });
   const create = trpc.invoices.create.useMutation({
     onSuccess: () => router.push("/invoices"),
   });
@@ -24,6 +26,8 @@ export default function NewInvoicePage() {
     tip: "PREDRACUN" as const,
     partnerId: "",
     kampanjaId: kampanjaIdParam ?? "",
+    ponudaId: ponudaIdParam ?? "",
+    opportunityId: "",
     datum: new Date().toISOString().slice(0, 10),
     rokPlacanja: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
     valuta: "EUR",
@@ -49,6 +53,21 @@ export default function NewInvoicePage() {
     }
   }, [form.kampanjaId, campaigns.data]);
 
+  // Ako je ponuda izabrana → preuzmi partnera, opportunity i valutu
+  useEffect(() => {
+    if (form.ponudaId && ponude.data) {
+      const p = ponude.data.find((x: any) => x.id === form.ponudaId);
+      if (p) {
+        setForm((f) => ({
+          ...f,
+          partnerId: p.partnerId,
+          opportunityId: (p as any).opportunityId ?? f.opportunityId,
+          valuta: p.valuta,
+        }));
+      }
+    }
+  }, [form.ponudaId, ponude.data]);
+
   const podzbir = stavke.reduce((acc, s) => {
     const brutto = Number(s.kolicina) * Number(s.jedinicnaCena);
     return acc + brutto - (brutto * Number(s.popust)) / 100;
@@ -69,6 +88,8 @@ export default function NewInvoicePage() {
       await create.mutateAsync({
         ...form,
         kampanjaId: form.kampanjaId || undefined,
+        ponudaId: form.ponudaId || undefined,
+        opportunityId: form.opportunityId || undefined,
         datum: new Date(form.datum),
         rokPlacanja: new Date(form.rokPlacanja),
         stavke,
@@ -103,6 +124,12 @@ export default function NewInvoicePage() {
             <Select value={form.kampanjaId} onChange={(e) => setForm({ ...form, kampanjaId: e.target.value })}>
               <option value="">— bez kampanje —</option>
               {(campaigns.data ?? []).map((k: any) => <option key={k.id} value={k.id}>{k.naziv}</option>)}
+            </Select>
+          </Field>
+          <Field label="Ponuda (prihvaćena)" hint="PZ Faze 1: nema izgubljenih para — povezi fakturu sa ponudom">
+            <Select value={form.ponudaId} onChange={(e) => setForm({ ...form, ponudaId: e.target.value })}>
+              <option value="">— bez ponude —</option>
+              {(ponude.data ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.broj}</option>)}
             </Select>
           </Field>
           <Field label="Valuta">
