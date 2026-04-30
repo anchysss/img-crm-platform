@@ -1255,6 +1255,94 @@ model RasporedPlakata {
 }
 
 // =============================================================
+// Šifarnici / Lookup tabele za logistiku (Outdoor + štampa + montaža)
+// =============================================================
+
+// Predefinisani paketi vozila za Beograd parcial branding (5/10/20 vozila × 10 paketa = 30)
+model PaketVozila {
+  id           String  @id @default(cuid())
+  pravnoLiceId String
+  kod          String // "PAKET_5_VOZ_7"
+  naziv        String // "5 Vozila - Paket 7"
+  brojVozila   Int
+  sastav       String // "1 x KT4, 2 x solo bus (27E, 44), 2 x zglobni bus (85, 95)"
+  napomena     String?
+  aktivan      Boolean @default(true)
+
+  @@unique([pravnoLiceId, kod])
+  @@index([pravnoLiceId])
+}
+
+// Folije za štampu — AVERY 3001 HOP, MACtac, …
+model Folija {
+  id           String  @id @default(cuid())
+  pravnoLiceId String
+  kod          String // "AVERY_3001_HOP"
+  naziv        String // "AVERY 3001 HOP"
+  napomena     String?
+  aktivan      Boolean @default(true)
+
+  @@unique([pravnoLiceId, kod])
+  @@index([pravnoLiceId])
+}
+
+// Dorada — print & cut, cut + transfer, laminacija, BEZ LAMINACIJE …
+model Dorada {
+  id           String  @id @default(cuid())
+  pravnoLiceId String
+  kod          String // "PRINT_CUT"
+  naziv        String // "print & cut"
+  napomena     String?
+  aktivan      Boolean @default(true)
+
+  @@unique([pravnoLiceId, kod])
+  @@index([pravnoLiceId])
+}
+
+// Mašina za štampu — LATEX, HP, XEIKON, ECO-SOLVENT …
+model Masina {
+  id           String  @id @default(cuid())
+  pravnoLiceId String
+  kod          String // "LATEX"
+  naziv        String // "LATEX"
+  napomena     String?
+  aktivan      Boolean @default(true)
+
+  @@unique([pravnoLiceId, kod])
+  @@index([pravnoLiceId])
+}
+
+// Montažer / ekipa za lepljenje — BUS BRANDING …
+model Montazer {
+  id           String  @id @default(cuid())
+  pravnoLiceId String
+  naziv        String // "BUS BRANDING"
+  kontakt      String?
+  email        String?
+  telefon      String?
+  napomena     String?
+  aktivan      Boolean @default(true)
+
+  @@index([pravnoLiceId])
+}
+
+// Putni trošak — BG ↔ grad sa km i cenom (lookup)
+model PutniTrosak {
+  id           String  @id @default(cuid())
+  pravnoLiceId String
+  gradOd       String // "BG"
+  gradDo       String // "NS"
+  kmJedanSmer  Int
+  cenaUkupno   Decimal @db.Decimal(12, 2)
+  valuta       String // "RSD"
+  napomena     String?
+  aktivan      Boolean @default(true)
+
+  @@unique([pravnoLiceId, gradOd, gradDo])
+  @@index([pravnoLiceId])
+}
+
+// =============================================================
 // Finansije: Plan fakturisanja (iz WON sa split-om po mesecima)
 // =============================================================
 

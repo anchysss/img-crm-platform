@@ -31,6 +31,7 @@ const SECTIONS: NavSection[] = [
       { href: "/logistika/radni-nalozi", label: "📋  Radni nalozi" },
       { href: "/logistika/mediabook", label: "🗓️  Kampanje" },
       { href: "/logistika/vozila", label: "🚌  Vozila" },
+      { href: "/logistika/sifarnici", label: "📚  Šifarnici" },
     ],
   },
   {
