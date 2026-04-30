@@ -8,8 +8,8 @@ import { AppError } from "../errors";
 // Generic CRUD pattern za lookup tabele:
 // PaketVozila, Folija, Dorada, Masina, Montazer, PutniTrosak
 // Sve tabele su izolovane po tenantu (pravnoLiceId).
-// Read-permission: campaigns READ; Write: campaigns CREATE/UPDATE/DELETE
-// (Admin/Manager/Logistika imaju campaigns dozvole — Codis ih je već definisao u RBAC.)
+// Read-permission: campaigns READ (svi imaju);
+// Write: system_settings UPDATE/DELETE — admin job, ne dira ga prodaja.
 // ============================================================
 
 export const logistikaLookupsRouter = router({
@@ -21,7 +21,7 @@ export const logistikaLookupsRouter = router({
         orderBy: [{ brojVozila: "asc" }, { naziv: "asc" }],
       });
     }),
-    upsert: withPermission("campaigns", "CREATE").input(
+    upsert: withPermission("system_settings", "UPDATE").input(
       z.object({
         id: z.string().cuid().optional(),
         kod: z.string().min(1),
@@ -41,7 +41,7 @@ export const logistikaLookupsRouter = router({
       }
       return prisma.paketVozila.create({ data: { pravnoLiceId: ctx.session!.tenantId, ...rest } });
     }),
-    remove: withPermission("campaigns", "DELETE").input(z.object({ id: z.string().cuid() })).mutation(async ({ ctx, input }) => {
+    remove: withPermission("system_settings", "DELETE").input(z.object({ id: z.string().cuid() })).mutation(async ({ ctx, input }) => {
       const ex = await prisma.paketVozila.findUnique({ where: { id: input.id } });
       if (!ex) throw new AppError("NOT_FOUND", "Paket ne postoji");
       ensureTenant(ctx.session!, ex.pravnoLiceId);
@@ -55,7 +55,7 @@ export const logistikaLookupsRouter = router({
     list: withPermission("campaigns", "READ").query(async ({ ctx }) =>
       prisma.folija.findMany({ where: { ...tenantWhere(ctx.session!), aktivan: true }, orderBy: { naziv: "asc" } }),
     ),
-    upsert: withPermission("campaigns", "CREATE").input(
+    upsert: withPermission("system_settings", "UPDATE").input(
       z.object({
         id: z.string().cuid().optional(),
         kod: z.string().min(1),
@@ -73,7 +73,7 @@ export const logistikaLookupsRouter = router({
       }
       return prisma.folija.create({ data: { pravnoLiceId: ctx.session!.tenantId, ...rest } });
     }),
-    remove: withPermission("campaigns", "DELETE").input(z.object({ id: z.string().cuid() })).mutation(async ({ ctx, input }) => {
+    remove: withPermission("system_settings", "DELETE").input(z.object({ id: z.string().cuid() })).mutation(async ({ ctx, input }) => {
       const ex = await prisma.folija.findUnique({ where: { id: input.id } });
       if (!ex) throw new AppError("NOT_FOUND", "Folija ne postoji");
       ensureTenant(ctx.session!, ex.pravnoLiceId);
@@ -87,7 +87,7 @@ export const logistikaLookupsRouter = router({
     list: withPermission("campaigns", "READ").query(async ({ ctx }) =>
       prisma.dorada.findMany({ where: { ...tenantWhere(ctx.session!), aktivan: true }, orderBy: { naziv: "asc" } }),
     ),
-    upsert: withPermission("campaigns", "CREATE").input(
+    upsert: withPermission("system_settings", "UPDATE").input(
       z.object({
         id: z.string().cuid().optional(),
         kod: z.string().min(1),
@@ -105,7 +105,7 @@ export const logistikaLookupsRouter = router({
       }
       return prisma.dorada.create({ data: { pravnoLiceId: ctx.session!.tenantId, ...rest } });
     }),
-    remove: withPermission("campaigns", "DELETE").input(z.object({ id: z.string().cuid() })).mutation(async ({ ctx, input }) => {
+    remove: withPermission("system_settings", "DELETE").input(z.object({ id: z.string().cuid() })).mutation(async ({ ctx, input }) => {
       const ex = await prisma.dorada.findUnique({ where: { id: input.id } });
       if (!ex) throw new AppError("NOT_FOUND", "Dorada ne postoji");
       ensureTenant(ctx.session!, ex.pravnoLiceId);
@@ -119,7 +119,7 @@ export const logistikaLookupsRouter = router({
     list: withPermission("campaigns", "READ").query(async ({ ctx }) =>
       prisma.masina.findMany({ where: { ...tenantWhere(ctx.session!), aktivan: true }, orderBy: { naziv: "asc" } }),
     ),
-    upsert: withPermission("campaigns", "CREATE").input(
+    upsert: withPermission("system_settings", "UPDATE").input(
       z.object({
         id: z.string().cuid().optional(),
         kod: z.string().min(1),
@@ -137,7 +137,7 @@ export const logistikaLookupsRouter = router({
       }
       return prisma.masina.create({ data: { pravnoLiceId: ctx.session!.tenantId, ...rest } });
     }),
-    remove: withPermission("campaigns", "DELETE").input(z.object({ id: z.string().cuid() })).mutation(async ({ ctx, input }) => {
+    remove: withPermission("system_settings", "DELETE").input(z.object({ id: z.string().cuid() })).mutation(async ({ ctx, input }) => {
       const ex = await prisma.masina.findUnique({ where: { id: input.id } });
       if (!ex) throw new AppError("NOT_FOUND", "Mašina ne postoji");
       ensureTenant(ctx.session!, ex.pravnoLiceId);
@@ -151,7 +151,7 @@ export const logistikaLookupsRouter = router({
     list: withPermission("campaigns", "READ").query(async ({ ctx }) =>
       prisma.montazer.findMany({ where: { ...tenantWhere(ctx.session!), aktivan: true }, orderBy: { naziv: "asc" } }),
     ),
-    upsert: withPermission("campaigns", "CREATE").input(
+    upsert: withPermission("system_settings", "UPDATE").input(
       z.object({
         id: z.string().cuid().optional(),
         naziv: z.string().min(1),
@@ -172,7 +172,7 @@ export const logistikaLookupsRouter = router({
       }
       return prisma.montazer.create({ data: { pravnoLiceId: ctx.session!.tenantId, ...data } });
     }),
-    remove: withPermission("campaigns", "DELETE").input(z.object({ id: z.string().cuid() })).mutation(async ({ ctx, input }) => {
+    remove: withPermission("system_settings", "DELETE").input(z.object({ id: z.string().cuid() })).mutation(async ({ ctx, input }) => {
       const ex = await prisma.montazer.findUnique({ where: { id: input.id } });
       if (!ex) throw new AppError("NOT_FOUND", "Montažer ne postoji");
       ensureTenant(ctx.session!, ex.pravnoLiceId);
@@ -186,7 +186,7 @@ export const logistikaLookupsRouter = router({
     list: withPermission("campaigns", "READ").query(async ({ ctx }) =>
       prisma.putniTrosak.findMany({ where: { ...tenantWhere(ctx.session!), aktivan: true }, orderBy: [{ gradOd: "asc" }, { gradDo: "asc" }] }),
     ),
-    upsert: withPermission("campaigns", "CREATE").input(
+    upsert: withPermission("system_settings", "UPDATE").input(
       z.object({
         id: z.string().cuid().optional(),
         gradOd: z.string().min(1),
@@ -207,7 +207,7 @@ export const logistikaLookupsRouter = router({
       }
       return prisma.putniTrosak.create({ data: { pravnoLiceId: ctx.session!.tenantId, ...rest } });
     }),
-    remove: withPermission("campaigns", "DELETE").input(z.object({ id: z.string().cuid() })).mutation(async ({ ctx, input }) => {
+    remove: withPermission("system_settings", "DELETE").input(z.object({ id: z.string().cuid() })).mutation(async ({ ctx, input }) => {
       const ex = await prisma.putniTrosak.findUnique({ where: { id: input.id } });
       if (!ex) throw new AppError("NOT_FOUND", "Putni trošak ne postoji");
       ensureTenant(ctx.session!, ex.pravnoLiceId);

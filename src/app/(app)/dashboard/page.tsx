@@ -18,6 +18,8 @@ export default function DashboardPage() {
   const k = data.kpi;
   return (
     <div className="flex flex-col gap-6">
+      <CampaignsWidget items={kampanje.data ?? []} />
+
       <h1 className="text-2xl font-semibold">Danas</h1>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -101,7 +103,6 @@ export default function DashboardPage() {
         </section>
       )}
 
-      <CampaignsWidget items={kampanje.data ?? []} />
       <PonudeWidget items={ponude.data ?? []} />
 
       {(forecastAcc.data ?? []).length > 0 && (

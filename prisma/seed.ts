@@ -66,7 +66,9 @@ const PERMISSION_MATRIX: Record<RolaKod, Array<[string, AkcijaDozvole[]]>> = {
     ["activities", ["READ", "CREATE", "UPDATE", "DELETE"]],
     ["opportunities", ["READ", "CREATE", "UPDATE", "EXPORT", "APPROVE"]],
     ["pipeline", ["READ", "EXPORT"]],
-    ["campaigns", ["READ", "UPDATE"]],
+    // Workflow logistike: prodaja otvara RN, učestvuje u pripremi → CREATE/UPDATE/DELETE
+    ["campaigns", ["READ", "CREATE", "UPDATE", "DELETE", "EXPORT"]],
+    ["vehicles", ["READ"]],
     ["mediabook", ["READ", "APPROVE"]],
     ["invoices", ["READ"]],
     ["reports", ["READ", "EXPORT"]],
@@ -79,7 +81,8 @@ const PERMISSION_MATRIX: Record<RolaKod, Array<[string, AkcijaDozvole[]]>> = {
     ["activities", ["READ", "CREATE", "UPDATE"]],
     ["opportunities", ["READ", "CREATE", "UPDATE"]],
     ["pipeline", ["READ"]],
-    ["campaigns", ["READ"]],
+    // Prodaja otvara radni nalog i prati workflow (CREATE/UPDATE)
+    ["campaigns", ["READ", "CREATE", "UPDATE"]],
     ["vehicles", ["READ"]],
     ["positions", ["READ"]],
     ["mediabook", ["READ", "APPROVE"]],
