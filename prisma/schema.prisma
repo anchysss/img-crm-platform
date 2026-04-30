@@ -765,6 +765,14 @@ enum NotifikacijaTip {
   RADNI_NALOG_NOVI
   PLAN_FAKTURISANJA_NOVI
   PONUDA_PRIHVACENA
+  // Logistika workflow
+  RN_PRIHVACEN_LOGISTIKA
+  PRIPREMA_POSLATA
+  KOLORNA_PROBA_NA_OVERAVANJU
+  PROBA_ODOBRENA
+  PROBA_KOREKCIJA
+  STAMPA_GOTOVA
+  MONTAZA_ZAVRSENA
 }
 
 model AuditLog {
@@ -1000,8 +1008,18 @@ model RadniNalog {
   brojVozilaPoGradu Json? // {"Beograd": 30, "Niš": 5, ...}
   napomena          String?
   kreativaUrl       String?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+
+  // Workflow priprema fajlova / kolorna proba
+  kolornaProba       Boolean        @default(false) // da li se radi kolorna proba
+  pripremaStatus     PripremaStatus @default(NEMA_PRIPREME)
+  pripremaUrl        String? // link na fajlove pripreme (Drive, Dropbox…)
+  pripremaPoslataAt  DateTime? // kad je prodaja poslala pripremu
+  pripremaOdobrenaAt DateTime? // kad je proba odobrena (od strane klijenta ili interno)
+  pripremaOdobrioId  String? // korisnik koji je odobrio
+  korekcijaNapomena  String? // razlog korekcije ako proba nije odobrena
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Logistika workflow djeca
   nalogMontazu  NalogMontazu[]
@@ -1018,10 +1036,25 @@ model RadniNalog {
 enum RadniNalogStatus {
   NOVO
   PRIHVACEN_LOGISTIKA
+  PRIPREMA_FAJLOVA
+  KOLORNA_PROBA
+  PROBA_ODOBRENA
   PRIPREMA_MONTAZE
   U_REALIZACIJI
+  STAMPA_U_TOKU
+  MONTAZA_U_TOKU
   ZAVRSEN
   OTKAZAN
+}
+
+enum PripremaStatus {
+  NEMA_PRIPREME // još nije ni počela
+  U_PRIPREMI // prodaja radi pripremu
+  POSLATA // prodaja poslala fajlove logistici
+  KOLORNA_PROBA_NA_OVERAVANJU // proba u IMG-u, čeka klijenta
+  ODOBRENA // klijent odobrio
+  KOREKCIJA // vraćeno na korekciju
+  GOTOVO // sve je spremno za štampu
 }
 
 // =============================================================

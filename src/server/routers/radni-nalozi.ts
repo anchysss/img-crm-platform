@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { tenantWhere, ensureTenant } from "../tenant";
 import { audit } from "../audit";
 import { AppError } from "../errors";
-import { RadniNalogStatus } from "@prisma/client";
+import { RadniNalogStatus, PripremaStatus } from "@prisma/client";
+import { notifyRnStatusChange, notifyPripremaChange } from "../services/notify-workflow";
 
 export const radniNaloziRouter = router({
   list: withPermission("campaigns", "READ").input(
@@ -61,6 +62,133 @@ export const radniNaloziRouter = router({
       },
     });
     await audit({ ctx: ctx.session, entitet: "RadniNalog", entitetId: input.id, akcija: "UPDATE", diff: { status: input.status } });
+    // Workflow notifikacija (best-effort)
+    try {
+      const partner = await prisma.partner.findUnique({ where: { id: rn.partnerId } });
+      await notifyRnStatusChange(
+        {
+          pravnoLiceId: rn.pravnoLiceId,
+          radniNalogId: rn.id,
+          broj: rn.broj,
+          vlasnikProdajaId: rn.vlasnikProdajaId,
+          partnerNaziv: partner?.naziv,
+        },
+        rn.status,
+        input.status,
+      );
+    } catch (e) {
+      console.error("notifyRnStatusChange failed", e);
+    }
     return updated;
+  }),
+
+  // Priprema fajlova / kolorna proba
+  setPriprema: withPermission("campaigns", "UPDATE").input(
+    z.object({
+      id: z.string().cuid(),
+      kolornaProba: z.boolean().optional(),
+      pripremaUrl: z.string().url().optional().or(z.literal("")),
+      pripremaStatus: z.nativeEnum(PripremaStatus).optional(),
+      korekcijaNapomena: z.string().optional(),
+    }),
+  ).mutation(async ({ ctx, input }) => {
+    const rn = await prisma.radniNalog.findUnique({ where: { id: input.id } });
+    if (!rn) throw new AppError("NOT_FOUND", "Radni nalog ne postoji");
+    ensureTenant(ctx.session!, rn.pravnoLiceId);
+
+    const data: any = {};
+    if (input.kolornaProba !== undefined) data.kolornaProba = input.kolornaProba;
+    if (input.pripremaUrl !== undefined) data.pripremaUrl = input.pripremaUrl || null;
+    if (input.korekcijaNapomena !== undefined) data.korekcijaNapomena = input.korekcijaNapomena;
+    if (input.pripremaStatus) {
+      data.pripremaStatus = input.pripremaStatus;
+      if (input.pripremaStatus === "POSLATA") data.pripremaPoslataAt = new Date();
+      if (input.pripremaStatus === "ODOBRENA") {
+        data.pripremaOdobrenaAt = new Date();
+        data.pripremaOdobrioId = ctx.session!.korisnikId;
+      }
+    }
+
+    const updated = await prisma.radniNalog.update({ where: { id: input.id }, data });
+    await audit({ ctx: ctx.session, entitet: "RadniNalog", entitetId: input.id, akcija: "UPDATE", diff: data });
+
+    if (input.pripremaStatus) {
+      try {
+        const partner = await prisma.partner.findUnique({ where: { id: rn.partnerId } });
+        await notifyPripremaChange(
+          {
+            pravnoLiceId: rn.pravnoLiceId,
+            radniNalogId: rn.id,
+            broj: rn.broj,
+            vlasnikProdajaId: rn.vlasnikProdajaId,
+            partnerNaziv: partner?.naziv,
+          },
+          input.pripremaStatus,
+        );
+      } catch (e) {
+        console.error("notifyPripremaChange failed", e);
+      }
+    }
+    return updated;
+  }),
+
+  // Skraćenica za "Odobri probu" → ODOBRENA + status PROBA_ODOBRENA
+  odobriProbu: withPermission("campaigns", "UPDATE").input(
+    z.object({ id: z.string().cuid() }),
+  ).mutation(async ({ ctx, input }) => {
+    const rn = await prisma.radniNalog.findUnique({ where: { id: input.id } });
+    if (!rn) throw new AppError("NOT_FOUND", "Radni nalog ne postoji");
+    ensureTenant(ctx.session!, rn.pravnoLiceId);
+    await prisma.radniNalog.update({
+      where: { id: input.id },
+      data: {
+        pripremaStatus: "ODOBRENA",
+        pripremaOdobrenaAt: new Date(),
+        pripremaOdobrioId: ctx.session!.korisnikId,
+        status: "PROBA_ODOBRENA",
+      },
+    });
+    const partner = await prisma.partner.findUnique({ where: { id: rn.partnerId } });
+    const baseCtx = {
+      pravnoLiceId: rn.pravnoLiceId,
+      radniNalogId: rn.id,
+      broj: rn.broj,
+      vlasnikProdajaId: rn.vlasnikProdajaId,
+      partnerNaziv: partner?.naziv,
+    };
+    try {
+      await notifyPripremaChange(baseCtx, "ODOBRENA");
+      await notifyRnStatusChange(baseCtx, rn.status, "PROBA_ODOBRENA");
+    } catch (e) {
+      console.error("notify failed", e);
+    }
+    return { ok: true };
+  }),
+
+  // Vrati na korekciju
+  vratiNaKorekciju: withPermission("campaigns", "UPDATE").input(
+    z.object({ id: z.string().cuid(), razlog: z.string().min(1) }),
+  ).mutation(async ({ ctx, input }) => {
+    const rn = await prisma.radniNalog.findUnique({ where: { id: input.id } });
+    if (!rn) throw new AppError("NOT_FOUND", "Radni nalog ne postoji");
+    ensureTenant(ctx.session!, rn.pravnoLiceId);
+    await prisma.radniNalog.update({
+      where: { id: input.id },
+      data: {
+        pripremaStatus: "KOREKCIJA",
+        korekcijaNapomena: input.razlog,
+        status: "PRIPREMA_FAJLOVA",
+      },
+    });
+    const partner = await prisma.partner.findUnique({ where: { id: rn.partnerId } });
+    try {
+      await notifyPripremaChange(
+        { pravnoLiceId: rn.pravnoLiceId, radniNalogId: rn.id, broj: rn.broj, vlasnikProdajaId: rn.vlasnikProdajaId, partnerNaziv: partner?.naziv },
+        "KOREKCIJA",
+      );
+    } catch (e) {
+      console.error("notify failed", e);
+    }
+    return { ok: true };
   }),
 });

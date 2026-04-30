@@ -10,10 +10,25 @@ import { formatDate } from "@/lib/utils";
 const STATUS_TONE: Record<string, any> = {
   NOVO: "warning",
   PRIHVACEN_LOGISTIKA: "info",
+  PRIPREMA_FAJLOVA: "warning",
+  KOLORNA_PROBA: "warning",
+  PROBA_ODOBRENA: "info",
   PRIPREMA_MONTAZE: "info",
   U_REALIZACIJI: "info",
+  STAMPA_U_TOKU: "info",
+  MONTAZA_U_TOKU: "info",
   ZAVRSEN: "success",
   OTKAZAN: "danger",
+};
+
+const PRIPREMA_TONE: Record<string, any> = {
+  NEMA_PRIPREME: "default",
+  U_PRIPREMI: "warning",
+  POSLATA: "info",
+  KOLORNA_PROBA_NA_OVERAVANJU: "warning",
+  ODOBRENA: "success",
+  KOREKCIJA: "danger",
+  GOTOVO: "success",
 };
 
 export default function RadniNalogDetail() {
@@ -35,6 +50,9 @@ export default function RadniNalogDetail() {
     onSuccess: () => refetch(),
   });
   const createResenje = trpc.resenja.create.useMutation({ onSuccess: () => refetch() });
+  const setPriprema = trpc.radniNalozi.setPriprema.useMutation({ onSuccess: () => refetch() });
+  const odobriProbu = trpc.radniNalozi.odobriProbu.useMutation({ onSuccess: () => refetch() });
+  const vratiNaKorekciju = trpc.radniNalozi.vratiNaKorekciju.useMutation({ onSuccess: () => refetch() });
 
   if (isLoading) return <p>Učitavam...</p>;
   if (!data) return <p>Radni nalog ne postoji.</p>;
@@ -50,9 +68,93 @@ export default function RadniNalogDetail() {
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={() => window.print()}>🖨️ Štampaj / PDF</Button>
           {data.status === "NOVO" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "PRIHVACEN_LOGISTIKA" })}>✓ Prihvati nalog</Button>}
-          {data.status === "PRIHVACEN_LOGISTIKA" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "PRIPREMA_MONTAZE" })}>U pripremi</Button>}
+          {data.status === "PRIHVACEN_LOGISTIKA" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "PRIPREMA_FAJLOVA" })}>→ Priprema fajlova</Button>}
+          {data.status === "PRIPREMA_FAJLOVA" && (data as any).kolornaProba && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "KOLORNA_PROBA" })}>→ Kolorna proba</Button>}
+          {data.status === "PRIPREMA_FAJLOVA" && !(data as any).kolornaProba && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "PROBA_ODOBRENA" })}>→ Preskoči, štampa</Button>}
+          {data.status === "PROBA_ODOBRENA" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "STAMPA_U_TOKU" })}>→ Štampa u toku</Button>}
+          {data.status === "STAMPA_U_TOKU" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "MONTAZA_U_TOKU" })}>→ Montaža</Button>}
+          {data.status === "MONTAZA_U_TOKU" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "ZAVRSEN" })}>✓ Završi</Button>}
+          {/* Legacy flow fallback */}
           {data.status === "PRIPREMA_MONTAZE" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "U_REALIZACIJI" })}>Pokreni realizaciju</Button>}
           {data.status === "U_REALIZACIJI" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "ZAVRSEN" })}>Završi</Button>}
+        </div>
+      </div>
+
+      {/* Priprema fajlova / kolorna proba panel (no-print) */}
+      <div className="no-print rounded-md border bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold">Priprema fajlova</h2>
+            <Badge variant={PRIPREMA_TONE[(data as any).pripremaStatus ?? "NEMA_PRIPREME"]}>
+              {((data as any).pripremaStatus ?? "NEMA_PRIPREME").replace(/_/g, " ")}
+            </Badge>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={Boolean((data as any).kolornaProba)}
+              onChange={(e) => setPriprema.mutate({ id, kolornaProba: e.target.checked })}
+            />
+            Radi se kolorna proba
+          </label>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-[11px] uppercase tracking-wider text-gray-500">URL fajlova pripreme</label>
+            <input
+              className="w-full rounded border px-2 py-1.5 text-sm"
+              placeholder="https://drive.google.com/..."
+              defaultValue={(data as any).pripremaUrl ?? ""}
+              onBlur={(e) => setPriprema.mutate({ id, pripremaUrl: e.target.value })}
+            />
+            {(data as any).pripremaUrl && (
+              <a href={(data as any).pripremaUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-red-700 hover:underline">📎 Otvori pripremu</a>
+            )}
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] uppercase tracking-wider text-gray-500">Status pripreme</label>
+            <select
+              className="w-full rounded border px-2 py-1.5 text-sm"
+              value={(data as any).pripremaStatus ?? "NEMA_PRIPREME"}
+              onChange={(e) => setPriprema.mutate({ id, pripremaStatus: e.target.value as any })}
+            >
+              <option value="NEMA_PRIPREME">Nema pripreme</option>
+              <option value="U_PRIPREMI">U pripremi</option>
+              <option value="POSLATA">Poslata logistici</option>
+              <option value="KOLORNA_PROBA_NA_OVERAVANJU">Kolorna proba na overavanju</option>
+              <option value="ODOBRENA">Odobrena</option>
+              <option value="KOREKCIJA">Korekcija</option>
+              <option value="GOTOVO">Gotovo — može u štampu</option>
+            </select>
+          </div>
+        </div>
+
+        {(data as any).korekcijaNapomena && (
+          <div className="mt-2 rounded border border-red-200 bg-red-50 p-2 text-xs">
+            <strong>Razlog korekcije:</strong> {(data as any).korekcijaNapomena}
+          </div>
+        )}
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {((data as any).pripremaStatus === "KOLORNA_PROBA_NA_OVERAVANJU" || (data as any).pripremaStatus === "POSLATA") && (
+            <>
+              <Button size="sm" onClick={() => odobriProbu.mutate({ id })}>✓ Odobri probu</Button>
+              <Button size="sm" variant="outline" onClick={() => {
+                const razlog = prompt("Razlog korekcije:");
+                if (razlog) vratiNaKorekciju.mutate({ id, razlog });
+              }}>↩ Vrati na korekciju</Button>
+            </>
+          )}
+          {((data as any).pripremaStatus === "U_PRIPREMI" || (data as any).pripremaStatus === "KOREKCIJA") && (
+            <Button size="sm" onClick={() => setPriprema.mutate({ id, pripremaStatus: "POSLATA" })}>📨 Pošalji fajlove logistici</Button>
+          )}
+          {(data as any).pripremaPoslataAt && (
+            <span className="text-xs text-muted-foreground">Poslato: {formatDate((data as any).pripremaPoslataAt)}</span>
+          )}
+          {(data as any).pripremaOdobrenaAt && (
+            <span className="text-xs text-emerald-700">✓ Odobreno: {formatDate((data as any).pripremaOdobrenaAt)}</span>
+          )}
         </div>
       </div>
 
