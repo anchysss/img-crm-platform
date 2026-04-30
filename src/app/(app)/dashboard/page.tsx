@@ -17,8 +17,11 @@ export default function DashboardPage() {
 
   const k = data.kpi;
   return (
-    <div className="flex flex-col gap-6">
-      <CampaignsWidget items={kampanje.data ?? []} />
+    <div className="flex flex-col gap-8">
+      <section>
+        <h1 className="mb-3 text-2xl font-semibold">Dashboard</h1>
+        <CampaignsWidget items={kampanje.data ?? []} />
+      </section>
 
       <h1 className="text-2xl font-semibold">Danas</h1>
 
@@ -185,7 +188,11 @@ function CampaignsWidget({ items }: { items: any[] }) {
         <div className="mt-4 rounded-md border bg-card p-3">
           <div className="mb-2 flex items-center justify-between text-[10px] text-muted-foreground">
             <span>{new Date(past30).toLocaleDateString("sr-Latn")}</span>
-            <span>Sada</span>
+            <span className="flex items-center gap-3 text-[10px]">
+              <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-blue-500" />Outdoor</span>
+              <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-indigo-500" />Indoor</span>
+              <span>· Sada ·</span>
+            </span>
             <span>{new Date(future90).toLocaleDateString("sr-Latn")}</span>
           </div>
           <div className="relative">
@@ -197,21 +204,45 @@ function CampaignsWidget({ items }: { items: any[] }) {
                 const end = Math.min(k.doMs, future90);
                 const left = ((start - past30) / total) * 100;
                 const width = Math.max(1, ((end - start) / total) * 100);
-                const cls =
+                // 2 stripe-a: gornja Outdoor (#C70028 / status boja), donja Indoor (azurna)
+                const outdoorCls =
                   k.status === "U_REALIZACIJI" ? "bg-emerald-500"
                   : k.status === "POTVRDENA" ? "bg-blue-500"
                   : k.status === "ZAVRSENA" ? "bg-gray-400"
                   : "bg-red-400";
+                const indoorCls =
+                  k.status === "U_REALIZACIJI" ? "bg-cyan-500"
+                  : k.status === "POTVRDENA" ? "bg-indigo-500"
+                  : k.status === "ZAVRSENA" ? "bg-gray-300"
+                  : "bg-orange-400";
                 return (
-                  <div key={k.id} className="relative h-6 rounded bg-secondary/20">
-                    <Link
-                      href={`/logistika/kampanje/${k.id}`}
-                      className={`absolute flex h-full items-center rounded px-1.5 text-[10px] font-medium text-white hover:opacity-90 ${cls}`}
-                      style={{ left: `${left}%`, width: `${width}%` }}
-                      title={`${k.naziv} · ${k.partner} · ${formatDate(k.odDatum)} → ${formatDate(k.doDatum)}`}
-                    >
-                      <span className="truncate">{k.naziv}</span>
-                    </Link>
+                  <div key={k.id} className="relative flex h-7 flex-col gap-px rounded bg-secondary/20">
+                    {/* Outdoor stripe (gornja) */}
+                    <div className="relative h-1/2">
+                      {k.hasOutdoor && (
+                        <Link
+                          href={`/logistika/kampanje/${k.id}`}
+                          className={`absolute flex h-full items-center rounded-t px-1.5 text-[9px] font-medium text-white hover:opacity-90 ${outdoorCls}`}
+                          style={{ left: `${left}%`, width: `${width}%` }}
+                          title={`OUTDOOR · ${k.naziv} · ${k.partner} · ${formatDate(k.odDatum)} → ${formatDate(k.doDatum)}`}
+                        >
+                          <span className="truncate">O · {k.naziv}</span>
+                        </Link>
+                      )}
+                    </div>
+                    {/* Indoor stripe (donja) */}
+                    <div className="relative h-1/2">
+                      {k.hasIndoor && (
+                        <Link
+                          href={`/logistika/kampanje/${k.id}`}
+                          className={`absolute flex h-full items-center rounded-b px-1.5 text-[9px] font-medium text-white hover:opacity-90 ${indoorCls}`}
+                          style={{ left: `${left}%`, width: `${width}%` }}
+                          title={`INDOOR · ${k.naziv} · ${k.partner} · ${formatDate(k.odDatum)} → ${formatDate(k.doDatum)}`}
+                        >
+                          <span className="truncate">I · {k.naziv}</span>
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 );
               })}

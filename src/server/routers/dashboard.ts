@@ -108,19 +108,30 @@ export const dashboardRouter = router({
         odDatum: { lte: next90 },
         doDatum: { gte: past30 },
       },
-      include: { partner: true },
+      include: {
+        partner: true,
+        stavke: { include: { pozicija: { select: { tip: true } } } },
+      },
       orderBy: { odDatum: "asc" },
       take: 50,
     });
-    return kampanje.map((k) => ({
-      id: k.id,
-      naziv: k.naziv,
-      status: k.status,
-      partner: k.partner.naziv,
-      odDatum: k.odDatum,
-      doDatum: k.doDatum,
-      valuta: k.valuta,
-    }));
+    return kampanje.map((k) => {
+      // Outdoor = bilo koja pozicija != UNUTRA; Indoor = bilo koja pozicija == UNUTRA
+      const tipovi = new Set(k.stavke.map((s) => s.pozicija.tip));
+      const hasIndoor = tipovi.has("UNUTRA");
+      const hasOutdoor = Array.from(tipovi).some((t) => t !== "UNUTRA");
+      return {
+        id: k.id,
+        naziv: k.naziv,
+        status: k.status,
+        partner: k.partner.naziv,
+        odDatum: k.odDatum,
+        doDatum: k.doDatum,
+        valuta: k.valuta,
+        hasOutdoor: hasOutdoor || (!hasIndoor && !hasOutdoor), // ako nema stavki, default outdoor
+        hasIndoor,
+      };
+    });
   }),
 
   // Aktivne + poslate ponude (DRAFT, POSLATA, PRIHVACENA)

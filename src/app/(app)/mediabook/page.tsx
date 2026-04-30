@@ -223,12 +223,13 @@ function LegendChip({ cls, label }: { cls: string; label: string }) {
 function KampanjaCreateDialog({ prefill, onClose }: { prefill: { pozicijaId?: string; odDatum?: Date; doDatum?: Date }; onClose: () => void }) {
   const tenant = useTenant();
   const partneri = trpc.lookups.partnersShort.useQuery();
-  const opps = trpc.opportunities.list.useQuery({});
+  // Vezivanje kroz Ponudu (preferira se umesto prilike)
+  const ponude = trpc.ponude.list.useQuery({ status: "PRIHVACENA" });
   const create = trpc.campaigns.create.useMutation({ onSuccess: onClose });
   const [form, setForm] = useState({
     naziv: "",
     partnerId: "",
-    opportunityId: "",
+    ponudaId: "",
     odDatum: prefill.odDatum ? isoDate(prefill.odDatum) : isoDate(new Date()),
     doDatum: prefill.doDatum ? isoDate(prefill.doDatum) : isoDate(addDays(new Date(), 14)),
     cena: "",
@@ -237,8 +238,26 @@ function KampanjaCreateDialog({ prefill, onClose }: { prefill: { pozicijaId?: st
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!form.partnerId && partneri.data?.[0]) setForm((f) => ({ ...f, partnerId: partneri.data![0].id }));
-  }, [partneri.data, form.partnerId]);
+    if (!form.partnerId && !form.ponudaId && partneri.data?.[0]) {
+      setForm((f) => ({ ...f, partnerId: partneri.data![0].id }));
+    }
+  }, [partneri.data, form.partnerId, form.ponudaId]);
+
+  // Auto-populate partnerId + naziv kad se izabere ponuda
+  function onPonudaChange(ponudaId: string) {
+    const p = (ponude.data ?? []).find((x: any) => x.id === ponudaId);
+    if (!p) {
+      setForm((f) => ({ ...f, ponudaId: "" }));
+      return;
+    }
+    const partnerNaziv = (partneri.data ?? []).find((x: any) => x.id === p.partnerId)?.naziv ?? "";
+    setForm((f) => ({
+      ...f,
+      ponudaId,
+      partnerId: p.partnerId,
+      naziv: f.naziv || `${partnerNaziv} — ${p.broj}`,
+    }));
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -247,7 +266,7 @@ function KampanjaCreateDialog({ prefill, onClose }: { prefill: { pozicijaId?: st
       await create.mutateAsync({
         naziv: form.naziv,
         partnerId: form.partnerId,
-        opportunityId: form.opportunityId || undefined,
+        ponudaId: form.ponudaId || undefined,
         odDatum: new Date(form.odDatum),
         doDatum: new Date(form.doDatum),
         valuta: tenant.valuta,
@@ -262,7 +281,9 @@ function KampanjaCreateDialog({ prefill, onClose }: { prefill: { pozicijaId?: st
     } catch (e: any) { setErr(e.message); }
   }
 
-  const filteredOpps = (opps.data ?? []).filter((o: any) => !form.partnerId || o.partnerId === form.partnerId);
+  // Lista ponuda (PRIHVACENE) — za dropdown
+  const dostupnePonude = (ponude.data ?? []).filter((p: any) => !form.partnerId || p.partnerId === form.partnerId || p.id === form.ponudaId);
+  const partnerNazivByPart = new Map((partneri.data ?? []).map((p: any) => [p.id, p.naziv] as const));
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={onClose}>
@@ -276,19 +297,23 @@ function KampanjaCreateDialog({ prefill, onClose }: { prefill: { pozicijaId?: st
           </div>
         )}
         <form onSubmit={submit} className="grid grid-cols-2 gap-3">
-          <Field label="Naziv kampanje *">
-            <Input required value={form.naziv} onChange={(e) => setForm({ ...form, naziv: e.target.value })} placeholder="Npr. Lilly april 2026 — outdoor BG" />
-          </Field>
-          <Field label="Klijent *">
-            <Select required value={form.partnerId} onChange={(e) => setForm({ ...form, partnerId: e.target.value })}>
-              <option value="">—</option>
-              {(partneri.data ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.naziv}</option>)}
+          <Field label="Vezana ponuda *">
+            <Select required value={form.ponudaId} onChange={(e) => onPonudaChange(e.target.value)}>
+              <option value="">— izaberi prihvaćenu ponudu —</option>
+              {dostupnePonude.map((p: any) => (
+                <option key={p.id} value={p.id}>
+                  {p.broj} · {partnerNazivByPart.get(p.partnerId) ?? "—"} · {Number(p.ukupno).toLocaleString("sr-Latn")} {p.valuta}
+                </option>
+              ))}
             </Select>
           </Field>
-          <Field label="Vezana prilika (opciono)">
-            <Select value={form.opportunityId} onChange={(e) => setForm({ ...form, opportunityId: e.target.value })}>
-              <option value="">— bez prilike —</option>
-              {filteredOpps.map((o: any) => <option key={o.id} value={o.id}>{o.naziv}</option>)}
+          <Field label="Naziv kampanje *">
+            <Input required value={form.naziv} onChange={(e) => setForm({ ...form, naziv: e.target.value })} placeholder="Auto-popunjeno iz ponude" />
+          </Field>
+          <Field label="Klijent (auto iz ponude) *">
+            <Select required value={form.partnerId} onChange={(e) => setForm({ ...form, partnerId: e.target.value })} disabled={Boolean(form.ponudaId)}>
+              <option value="">—</option>
+              {(partneri.data ?? []).map((p: any) => <option key={p.id} value={p.id}>{p.naziv}</option>)}
             </Select>
           </Field>
           <Field label="Valuta"><Input value={tenant.valuta} disabled /></Field>
@@ -307,7 +332,7 @@ function KampanjaCreateDialog({ prefill, onClose }: { prefill: { pozicijaId?: st
           {err && <p className="col-span-2 text-sm text-destructive">{err}</p>}
           <div className="col-span-2 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Otkaži</Button>
-            <Button type="submit" disabled={create.isPending || !form.naziv || !form.partnerId}>
+            <Button type="submit" disabled={create.isPending || !form.naziv || !form.partnerId || !form.ponudaId}>
               {create.isPending ? "Čuvam..." : "Kreiraj kampanju"}
             </Button>
           </div>

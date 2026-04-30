@@ -552,6 +552,7 @@ model Kampanja {
   id            String         @id @default(cuid())
   pravnoLiceId  String
   opportunityId String?        @unique
+  ponudaId      String? // direktna veza na ponudu (preferira se nad opportunityId)
   partnerId     String
   naziv         String
   odDatum       DateTime
@@ -566,6 +567,7 @@ model Kampanja {
 
   pravnoLice  PravnoLice       @relation(fields: [pravnoLiceId], references: [id])
   opportunity Opportunity?     @relation(fields: [opportunityId], references: [id])
+  ponuda      Ponuda?          @relation(fields: [ponudaId], references: [id])
   partner     Partner          @relation(fields: [partnerId], references: [id])
   stavke      KampanjaStavka[]
   rezervacije Rezervacija[]
@@ -573,6 +575,7 @@ model Kampanja {
 
   @@index([pravnoLiceId, status])
   @@index([partnerId])
+  @@index([ponudaId])
 }
 
 enum KampanjaStatus {
@@ -1482,6 +1485,7 @@ model Ponuda {
 
   stavke    PonudaStavka[]
   dokumenti Dokument[]
+  Kampanja  Kampanja[]
 
   @@unique([pravnoLiceId, broj])
   @@index([partnerId])

@@ -15,6 +15,7 @@ export const campaignsRouter = router({
       doDatum: z.coerce.date(),
       valuta: z.string().length(3),
       opportunityId: z.string().cuid().optional(),
+      ponudaId: z.string().cuid().optional(),
       napomene: z.string().optional(),
       stavke: z.array(z.object({
         pozicijaId: z.string().cuid(),
@@ -37,6 +38,7 @@ export const campaignsRouter = router({
         doDatum: input.doDatum,
         valuta: input.valuta,
         opportunityId: input.opportunityId,
+        ponudaId: input.ponudaId,
         napomene: input.napomene,
         status: KampanjaStatus.POTVRDENA,
       },
