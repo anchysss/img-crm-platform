@@ -1047,24 +1047,32 @@ model Resenje {
 
 // Nalog za Montažu — Beograd ili Gradovi
 model NalogMontazu {
-  id           String            @id @default(cuid())
-  pravnoLiceId String
-  radniNalogId String
-  broj         String // 317-TELENOR-MONTAZA-BG
-  tip          NalogMontazuTip
-  grad         String? // za GRADOVI: konkretan grad
-  ekipa        String?
-  datumMontaze DateTime?
-  status       NalogStavkaStatus @default(NACRT)
-  napomena     String?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  id             String            @id @default(cuid())
+  pravnoLiceId   String
+  radniNalogId   String
+  broj           String // 317-TELENOR-MONTAZA-BG ili "125-2026"
+  tip            NalogMontazuTip
+  grad           String? // za GRADOVI: konkretan grad
+  ekipa          String? // legacy free-text (zadržano kompatibilnosti radi)
+  montazerId     String? // FK ka Montazer (BUS BRANDING…)
+  prevoznikNaziv String? // "Niš ekspres" — slobodno polje
+  masinaId       String? // FK ka Masina (LATEX…)
+  datumMontaze   DateTime?
+  vremeMontaze   String? // "08:00", "od 06h"
+  status         NalogStavkaStatus @default(NACRT)
+  napomena       String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
-  radniNalog RadniNalog           @relation(fields: [radniNalogId], references: [id], onDelete: Cascade)
-  stavke     NalogMontazuStavka[]
+  radniNalog  RadniNalog           @relation(fields: [radniNalogId], references: [id], onDelete: Cascade)
+  montazerRef Montazer?            @relation(fields: [montazerId], references: [id])
+  masinaRef   Masina?              @relation(fields: [masinaId], references: [id])
+  stavke      NalogMontazuStavka[]
 
   @@unique([pravnoLiceId, broj])
   @@index([radniNalogId])
+  @@index([montazerId])
+  @@index([masinaId])
 }
 
 enum NalogMontazuTip {
@@ -1082,8 +1090,9 @@ enum NalogStavkaStatus {
 
 // Stavka u nalogu za montažu — konkretan vozilo + raspored plakata
 model NalogMontazuStavka {
-  id             String            @id @default(cuid())
+  id             String  @id @default(cuid())
   nalogId        String
+  redniBr        Int? // 1, 2, 3 …
   voziloId       String?
   garazniBroj    String? // ako vozilo nije u sistemu
   garaza         String? // GSP Centrala / Dorćol / Karaburma...
@@ -1094,10 +1103,16 @@ model NalogMontazuStavka {
   sifraRasporeda String?
   // Brojevi panoa po dimenziji (Json — fleksibilno)
   brojPanoa      Json? // {"46x80 folija": 1, "79x37 folija": 8, "47x77 sv": 5}
-  status         NalogStavkaStatus @default(NACRT)
-  postavljenoAt  DateTime?
-  napomena       String?
-  problemTip     String? // "autobus nije došao", "zaključan", "farbanje"...
+
+  // Iz primera nalog za montažu.xlsx
+  skidanjeM2   Decimal? @db.Decimal(8, 2) // skidanje prethodne reklame, m²
+  montazaM2    Decimal? @db.Decimal(8, 2) // površina nove montaže, m²
+  rnStamparije String? // RN broj koji je vratila štamparija
+
+  status        NalogStavkaStatus @default(NACRT)
+  postavljenoAt DateTime?
+  napomena      String?
+  problemTip    String? // "autobus nije došao", "zaključan", "farbanje"...
 
   nalog   NalogMontazu @relation(fields: [nalogId], references: [id], onDelete: Cascade)
   vozilo  Vozilo?      @relation(fields: [voziloId], references: [id])
@@ -1113,21 +1128,26 @@ model NalogStampu {
   pravnoLiceId  String
   radniNalogId  String
   broj          String
+  kampanjaNaziv String? // "FAIRY HIGER - 2 kom"
   stamparija    StamparijaTip
   datumPredaje  DateTime
   rokIzrade     DateTime
   rokIzradeTime String? // "DO 14H"
-  masina        String? // HP / XEIKON / DRUGO
+  masinaId      String? // FK ka Masina (LATEX, HP, XEIKON…)
+  masina        String? // legacy fallback string
+  rnStamparije  String? // broj radnog naloga koji vrati štamparija
   status        NalogStavkaStatus @default(NACRT)
   napomena      String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 
   radniNalog RadniNalog          @relation(fields: [radniNalogId], references: [id], onDelete: Cascade)
+  masinaRef  Masina?             @relation(fields: [masinaId], references: [id])
   stavke     NalogStampuStavka[]
 
   @@unique([pravnoLiceId, broj])
   @@index([radniNalogId])
+  @@index([masinaId])
 }
 
 enum StamparijaTip {
@@ -1145,25 +1165,43 @@ enum MaterijalTip {
 }
 
 model NalogStampuStavka {
-  id            String       @id @default(cuid())
+  id            String  @id @default(cuid())
   nalogId       String
+  redniBr       Int? // 1, 2, 3 …
   grad          String // BG / NS / NI / KG / SU...
   resenjeId     String?
   resenjeOznaka String? // "R01" ako resenje nije FK
-  simpleks      Boolean      @default(true) // true = simpleks, false = dupleks
-  format        String // "46x80 ram", "79x37 sv", "47X77 sv"
-  tiraz         Int
-  materijal     MaterijalTip
-  gramatura     String? // "130gr", "3M IJ 20"
+  simpleks      Boolean @default(true) // true = simpleks, false = dupleks
+
+  // HIGER format kolona
+  fileNaziv String? // "155X105 - RAM - HIG crv"
+  formatX   Decimal? @db.Decimal(8, 2) // npr 155.00 cm
+  formatY   Decimal? @db.Decimal(8, 2) // npr 105.00 cm
+
+  // Backwards-compat: stari format string (i materijal enum) ostaju za stare zapise
+  format    String // "46x80 ram" — održava se za legacy
+  tiraz     Int
+  materijal MaterijalTip
+  gramatura String? // "130gr"
+
+  // Lookup FK (novo)
+  folijaId String?
+  doradaId String?
+
+  // Legacy
   dorada        String? // "secenje na format", "BEZ LAMINACIJE"
-  cenaJedinicna Decimal?     @db.Decimal(10, 2)
-  cenaUkupno    Decimal?     @db.Decimal(12, 2)
+  cenaJedinicna Decimal? @db.Decimal(10, 2)
+  cenaUkupno    Decimal? @db.Decimal(12, 2)
   napomena      String?
 
-  nalog   NalogStampu @relation(fields: [nalogId], references: [id], onDelete: Cascade)
-  resenje Resenje?    @relation(fields: [resenjeId], references: [id])
+  nalog     NalogStampu @relation(fields: [nalogId], references: [id], onDelete: Cascade)
+  resenje   Resenje?    @relation(fields: [resenjeId], references: [id])
+  folijaRef Folija?     @relation(fields: [folijaId], references: [id])
+  doradaRef Dorada?     @relation(fields: [doradaId], references: [id])
 
   @@index([nalogId])
+  @@index([folijaId])
+  @@index([doradaId])
 }
 
 // Cenovnik štampe (za auto-cost calculation pri kreiranju Naloga za Štampu)
@@ -1275,12 +1313,13 @@ model PaketVozila {
 
 // Folije za štampu — AVERY 3001 HOP, MACtac, …
 model Folija {
-  id           String  @id @default(cuid())
-  pravnoLiceId String
-  kod          String // "AVERY_3001_HOP"
-  naziv        String // "AVERY 3001 HOP"
-  napomena     String?
-  aktivan      Boolean @default(true)
+  id                String              @id @default(cuid())
+  pravnoLiceId      String
+  kod               String // "AVERY_3001_HOP"
+  naziv             String // "AVERY 3001 HOP"
+  napomena          String?
+  aktivan           Boolean             @default(true)
+  NalogStampuStavka NalogStampuStavka[]
 
   @@unique([pravnoLiceId, kod])
   @@index([pravnoLiceId])
@@ -1288,12 +1327,13 @@ model Folija {
 
 // Dorada — print & cut, cut + transfer, laminacija, BEZ LAMINACIJE …
 model Dorada {
-  id           String  @id @default(cuid())
-  pravnoLiceId String
-  kod          String // "PRINT_CUT"
-  naziv        String // "print & cut"
-  napomena     String?
-  aktivan      Boolean @default(true)
+  id                String              @id @default(cuid())
+  pravnoLiceId      String
+  kod               String // "PRINT_CUT"
+  naziv             String // "print & cut"
+  napomena          String?
+  aktivan           Boolean             @default(true)
+  NalogStampuStavka NalogStampuStavka[]
 
   @@unique([pravnoLiceId, kod])
   @@index([pravnoLiceId])
@@ -1301,12 +1341,14 @@ model Dorada {
 
 // Mašina za štampu — LATEX, HP, XEIKON, ECO-SOLVENT …
 model Masina {
-  id           String  @id @default(cuid())
+  id           String         @id @default(cuid())
   pravnoLiceId String
   kod          String // "LATEX"
   naziv        String // "LATEX"
   napomena     String?
-  aktivan      Boolean @default(true)
+  aktivan      Boolean        @default(true)
+  NalogMontazu NalogMontazu[]
+  NalogStampu  NalogStampu[]
 
   @@unique([pravnoLiceId, kod])
   @@index([pravnoLiceId])
@@ -1314,14 +1356,15 @@ model Masina {
 
 // Montažer / ekipa za lepljenje — BUS BRANDING …
 model Montazer {
-  id           String  @id @default(cuid())
+  id           String         @id @default(cuid())
   pravnoLiceId String
   naziv        String // "BUS BRANDING"
   kontakt      String?
   email        String?
   telefon      String?
   napomena     String?
-  aktivan      Boolean @default(true)
+  aktivan      Boolean        @default(true)
+  NalogMontazu NalogMontazu[]
 
   @@index([pravnoLiceId])
 }

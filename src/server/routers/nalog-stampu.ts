@@ -7,10 +7,19 @@ import { AppError } from "../errors";
 import { StamparijaTip, MaterijalTip, NalogStavkaStatus } from "@prisma/client";
 
 const stavkaInput = z.object({
+  redniBr: z.coerce.number().int().optional(),
   grad: z.string().min(1),
   resenjeId: z.string().cuid().optional(),
   resenjeOznaka: z.string().optional(),
   simpleks: z.boolean().default(true),
+  // HIGER kolone
+  fileNaziv: z.string().optional(),
+  formatX: z.coerce.number().optional(),
+  formatY: z.coerce.number().optional(),
+  // Lookup FK
+  folijaId: z.string().cuid().optional(),
+  doradaId: z.string().cuid().optional(),
+  // Legacy / fallback
   format: z.string().min(1),
   tiraz: z.coerce.number().int().min(1),
   materijal: z.nativeEnum(MaterijalTip),
@@ -38,7 +47,15 @@ export const nalogStampuRouter = router({
       where: { id: input.id },
       include: {
         radniNalog: true,
-        stavke: { include: { resenje: { select: { id: true, oznaka: true } } } },
+        masinaRef: true,
+        stavke: {
+          include: {
+            resenje: { select: { id: true, oznaka: true } },
+            folijaRef: { select: { id: true, naziv: true } },
+            doradaRef: { select: { id: true, naziv: true } },
+          },
+          orderBy: { redniBr: "asc" },
+        },
       },
     });
     if (!n) return null;
@@ -50,11 +67,14 @@ export const nalogStampuRouter = router({
   create: withPermission("campaigns", "CREATE").input(
     z.object({
       radniNalogId: z.string().cuid(),
+      kampanjaNaziv: z.string().optional(),
       stamparija: z.nativeEnum(StamparijaTip),
       datumPredaje: z.coerce.date(),
       rokIzrade: z.coerce.date(),
       rokIzradeTime: z.string().optional(),
+      masinaId: z.string().cuid().optional(),
       masina: z.string().optional(),
+      rnStamparije: z.string().optional(),
       napomena: z.string().optional(),
       stavke: z.array(stavkaInput).default([]),
     }),
@@ -74,18 +94,38 @@ export const nalogStampuRouter = router({
         pravnoLiceId: rn.pravnoLiceId,
         radniNalogId: input.radniNalogId,
         broj,
+        kampanjaNaziv: input.kampanjaNaziv,
         stamparija: input.stamparija,
         datumPredaje: input.datumPredaje,
         rokIzrade: input.rokIzrade,
         rokIzradeTime: input.rokIzradeTime,
+        masinaId: input.masinaId,
         masina: input.masina,
+        rnStamparije: input.rnStamparije,
         napomena: input.napomena,
-        stavke: { create: input.stavke },
+        stavke: { create: input.stavke.map((s, i) => ({ ...s, redniBr: s.redniBr ?? i + 1 })) },
       },
       include: { stavke: true },
     });
     await audit({ ctx: ctx.session, entitet: "NalogStampu", entitetId: created.id, akcija: "CREATE", diff: { broj, stamparija: input.stamparija } });
     return created;
+  }),
+
+  update: withPermission("campaigns", "UPDATE").input(
+    z.object({
+      id: z.string().cuid(),
+      kampanjaNaziv: z.string().optional(),
+      masinaId: z.string().cuid().optional().nullable(),
+      rnStamparije: z.string().optional(),
+      napomena: z.string().optional(),
+      rokIzradeTime: z.string().optional(),
+    }),
+  ).mutation(async ({ ctx, input }) => {
+    const n = await prisma.nalogStampu.findUnique({ where: { id: input.id } });
+    if (!n) throw new AppError("NOT_FOUND", "Nalog ne postoji");
+    ensureTenant(ctx.session!, n.pravnoLiceId);
+    const { id, ...rest } = input;
+    return prisma.nalogStampu.update({ where: { id }, data: rest });
   }),
 
   addStavka: withPermission("campaigns", "UPDATE").input(
@@ -95,7 +135,8 @@ export const nalogStampuRouter = router({
     if (!n) throw new AppError("NOT_FOUND", "Nalog ne postoji");
     ensureTenant(ctx.session!, n.pravnoLiceId);
     const { nalogId, ...rest } = input;
-    return prisma.nalogStampuStavka.create({ data: { nalogId, ...rest } });
+    const cnt = await prisma.nalogStampuStavka.count({ where: { nalogId } });
+    return prisma.nalogStampuStavka.create({ data: { nalogId, redniBr: rest.redniBr ?? cnt + 1, ...rest } });
   }),
 
   removeStavka: withPermission("campaigns", "UPDATE").input(

@@ -20,22 +20,30 @@ export default function NalogMontazuDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data, isLoading, refetch } = trpc.nalogMontazu.byId.useQuery({ id });
+  const montazeri = trpc.logistikaLookups.montazeri.list.useQuery();
+  const masine = trpc.logistikaLookups.masine.list.useQuery();
+
   const addStavka = trpc.nalogMontazu.addStavka.useMutation({ onSuccess: () => refetch() });
   const setStavkaStatus = trpc.nalogMontazu.setStavkaStatus.useMutation({ onSuccess: () => refetch() });
   const removeStavka = trpc.nalogMontazu.removeStavka.useMutation({ onSuccess: () => refetch() });
   const setNalogStatus = trpc.nalogMontazu.setStatus.useMutation({ onSuccess: () => refetch() });
+  const update = trpc.nalogMontazu.update.useMutation({ onSuccess: () => refetch() });
   const remove = trpc.nalogMontazu.remove.useMutation({ onSuccess: () => router.push(`/logistika/radni-nalozi/${data?.radniNalogId}`) });
 
-  const [garazniBroj, setGaraznibroj] = useState("");
-  const [garaza, setGaraza] = useState("");
-  const [linija, setLinija] = useState("");
+  // form state — kolone iz "nalog za montažu.xlsx": GB | tip vozila | skidanje m² | montaža m² | RN
+  const [garazniBroj, setGB] = useState("");
   const [tipVozila, setTipVozila] = useState("");
-  const [sifra, setSifra] = useState("");
+  const [linija, setLinija] = useState("");
+  const [skidanje, setSkidanje] = useState<number | "">("");
+  const [montaza, setMontaza] = useState<number | "">("");
+  const [rnSt, setRnSt] = useState("");
 
   if (isLoading) return <p>Učitavam...</p>;
   if (!data) return <p>Nalog ne postoji.</p>;
 
   const radniNalog: any = data.radniNalog;
+  const sumSkidanje = data.stavke.reduce((s: number, x: any) => s + Number(x.skidanjeM2 ?? 0), 0);
+  const sumMontaza = data.stavke.reduce((s: number, x: any) => s + Number(x.montazaM2 ?? 0), 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -52,7 +60,47 @@ export default function NalogMontazuDetail() {
         </div>
       </div>
 
-      {/* Print area */}
+      {/* Header edit panel */}
+      <div className="no-print rounded-md border bg-white p-3">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-3 lg:grid-cols-5">
+          <select
+            className="rounded border px-2 py-1.5 text-sm"
+            defaultValue={data.montazerId ?? ""}
+            onChange={(e) => update.mutate({ id, montazerId: e.target.value || null })}
+          >
+            <option value="">— montažer —</option>
+            {montazeri.data?.map((m: any) => <option key={m.id} value={m.id}>{m.naziv}</option>)}
+          </select>
+          <input
+            className="rounded border px-2 py-1.5 text-sm"
+            placeholder="Prevoznik (Niš ekspres…)"
+            defaultValue={data.prevoznikNaziv ?? ""}
+            onBlur={(e) => update.mutate({ id, prevoznikNaziv: e.target.value })}
+          />
+          <select
+            className="rounded border px-2 py-1.5 text-sm"
+            defaultValue={data.masinaId ?? ""}
+            onChange={(e) => update.mutate({ id, masinaId: e.target.value || null })}
+          >
+            <option value="">— mašina —</option>
+            {masine.data?.map((m: any) => <option key={m.id} value={m.id}>{m.naziv}</option>)}
+          </select>
+          <input
+            type="date"
+            className="rounded border px-2 py-1.5 text-sm"
+            defaultValue={data.datumMontaze ? new Date(data.datumMontaze).toISOString().substring(0, 10) : ""}
+            onBlur={(e) => update.mutate({ id, datumMontaze: e.target.value ? new Date(e.target.value) : null })}
+          />
+          <input
+            className="rounded border px-2 py-1.5 text-sm"
+            placeholder="Vreme (08:00 ili od 06h)"
+            defaultValue={data.vremeMontaze ?? ""}
+            onBlur={(e) => update.mutate({ id, vremeMontaze: e.target.value })}
+          />
+        </div>
+      </div>
+
+      {/* Print A4 */}
       <div className="print-area mx-auto w-full max-w-4xl rounded-md border bg-white p-10 shadow-sm text-sm text-black print:border-0 print:shadow-none">
         <header className="mb-6 flex items-start justify-between border-b-4 border-red-700 pb-4">
           <div>
@@ -64,7 +112,7 @@ export default function NalogMontazuDetail() {
             <div className="text-2xl font-bold uppercase">Nalog za montažu</div>
             <div className="mt-1 text-xs">Broj: <span className="font-mono font-semibold">{data.broj}</span></div>
             <div className="text-xs">Tip: <strong>{data.tip}</strong>{data.grad ? ` · ${data.grad}` : ""}</div>
-            <div className="text-xs">Datum: {data.datumMontaze ? formatDate(data.datumMontaze) : "—"}</div>
+            <div className="text-xs">Datum: {data.datumMontaze ? formatDate(data.datumMontaze) : "—"} {data.vremeMontaze ?? ""}</div>
           </div>
         </header>
 
@@ -76,43 +124,45 @@ export default function NalogMontazuDetail() {
             <div>Period: {formatDate(radniNalog?.odDatum)} — {formatDate(radniNalog?.doDatum)}</div>
           </div>
           <div>
-            <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">Ekipa</div>
-            <div className="text-sm">{data.ekipa ?? "—"}</div>
+            <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">Ekipa / Prevoznik</div>
+            <div className="text-sm">Montažer: <strong>{data.montazerRef?.naziv ?? data.ekipa ?? "—"}</strong></div>
+            <div>Prevoznik: {data.prevoznikNaziv ?? "—"}</div>
+            <div>MAŠINA: {data.masinaRef?.naziv ?? "—"}</div>
             {data.napomena && <div className="mt-1 text-[11px] text-gray-600">{data.napomena}</div>}
           </div>
         </section>
 
         <div className="mb-2 bg-gray-900 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-white">
-          Stavke — vozila i raspored plakata
+          Stavke — vozila i površine
         </div>
 
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="bg-gray-100">
-              <th className="border px-2 py-1 text-left">#</th>
-              <th className="border px-2 py-1 text-left">Garažni br.</th>
-              <th className="border px-2 py-1 text-left">Garaža</th>
-              <th className="border px-2 py-1 text-left">Linija</th>
-              <th className="border px-2 py-1 text-left">Tip vozila</th>
-              <th className="border px-2 py-1 text-left">Šifra rasp.</th>
-              <th className="border px-2 py-1 text-left">Rešenje</th>
+              <th className="border px-2 py-1 text-center">#</th>
+              <th className="border px-2 py-1 text-left">GB</th>
+              <th className="border px-2 py-1 text-left">tip vozila</th>
+              <th className="border px-2 py-1 text-left">linija</th>
+              <th className="border px-2 py-1 text-right">skidanje m²</th>
+              <th className="border px-2 py-1 text-right">montaža m²</th>
+              <th className="border px-2 py-1 text-left">RN</th>
               <th className="border px-2 py-1 text-left">Status</th>
               <th className="no-print border px-2 py-1"></th>
             </tr>
           </thead>
           <tbody>
             {data.stavke.length === 0 && (
-              <tr><td colSpan={9} className="border px-2 py-3 text-center text-muted-foreground">Nema stavki — dodaj vozila ispod.</td></tr>
+              <tr><td colSpan={9} className="border px-2 py-3 text-center text-muted-foreground">Nema stavki — dodaj ispod</td></tr>
             )}
             {data.stavke.map((s: any, idx: number) => (
               <tr key={s.id}>
-                <td className="border px-2 py-1">{idx + 1}</td>
+                <td className="border px-2 py-1 text-center">{s.redniBr ?? idx + 1}</td>
                 <td className="border px-2 py-1">{s.vozilo?.sifra ?? s.garazniBroj ?? "—"}</td>
-                <td className="border px-2 py-1">{s.vozilo?.garaza ?? s.garaza ?? "—"}</td>
-                <td className="border px-2 py-1">{s.linija ?? "—"}</td>
                 <td className="border px-2 py-1">{s.vozilo?.tipVozilaTxt ?? s.tipVozila ?? "—"}</td>
-                <td className="border px-2 py-1 font-mono">{s.sifraRasporeda ?? "—"}</td>
-                <td className="border px-2 py-1">{s.resenje?.oznaka ?? "—"}</td>
+                <td className="border px-2 py-1">{s.linija ?? "—"}</td>
+                <td className="border px-2 py-1 text-right">{s.skidanjeM2 ? Number(s.skidanjeM2) : "—"}</td>
+                <td className="border px-2 py-1 text-right">{s.montazaM2 ? Number(s.montazaM2) : "—"}</td>
+                <td className="border px-2 py-1 font-mono">{s.rnStamparije ?? "—"}</td>
                 <td className="border px-2 py-1">
                   <Badge variant={STATUS_TONE[s.status]}>{s.status}</Badge>
                 </td>
@@ -132,20 +182,37 @@ export default function NalogMontazuDetail() {
                 </td>
               </tr>
             ))}
+            {data.stavke.length > 0 && (
+              <tr className="bg-gray-50 font-semibold">
+                <td colSpan={4} className="border px-2 py-1 text-right">UKUPNO m²</td>
+                <td className="border px-2 py-1 text-right">{sumSkidanje.toFixed(2)}</td>
+                <td className="border px-2 py-1 text-right">{sumMontaza.toFixed(2)}</td>
+                <td colSpan={3} className="border px-2 py-1"></td>
+              </tr>
+            )}
           </tbody>
         </table>
 
-        {/* Add stavka inline (no-print) */}
+        {/* Add stavka inline */}
         <div className="no-print mt-3 grid grid-cols-7 gap-1 text-xs">
-          <input className="rounded border px-2 py-1" placeholder="Garažni br." value={garazniBroj} onChange={(e) => setGaraznibroj(e.target.value)} />
-          <input className="rounded border px-2 py-1" placeholder="Garaža" value={garaza} onChange={(e) => setGaraza(e.target.value)} />
-          <input className="rounded border px-2 py-1" placeholder="Linija" value={linija} onChange={(e) => setLinija(e.target.value)} />
-          <input className="rounded border px-2 py-1" placeholder="Tip vozila" value={tipVozila} onChange={(e) => setTipVozila(e.target.value)} />
-          <input className="rounded border px-2 py-1" placeholder="Šifra (1+8)" value={sifra} onChange={(e) => setSifra(e.target.value)} />
-          <Button size="sm" className="col-span-2" onClick={() => {
-            addStavka.mutate({ nalogId: id, garazniBroj: garazniBroj || undefined, garaza: garaza || undefined, linija: linija || undefined, tipVozila: tipVozila || undefined, sifraRasporeda: sifra || undefined });
-            setGaraznibroj(""); setGaraza(""); setLinija(""); setTipVozila(""); setSifra("");
-          }}>+ Dodaj stavku</Button>
+          <input className="rounded border px-2 py-1" placeholder="GB (3117)" value={garazniBroj} onChange={(e) => setGB(e.target.value)} />
+          <input className="rounded border px-2 py-1" placeholder="tip vozila" value={tipVozila} onChange={(e) => setTipVozila(e.target.value)} />
+          <input className="rounded border px-2 py-1" placeholder="linija" value={linija} onChange={(e) => setLinija(e.target.value)} />
+          <input type="number" step="0.5" className="rounded border px-2 py-1" placeholder="skidanje m²" value={skidanje} onChange={(e) => setSkidanje(e.target.value === "" ? "" : Number(e.target.value))} />
+          <input type="number" step="0.5" className="rounded border px-2 py-1" placeholder="montaža m²" value={montaza} onChange={(e) => setMontaza(e.target.value === "" ? "" : Number(e.target.value))} />
+          <input className="rounded border px-2 py-1" placeholder="RN štamp." value={rnSt} onChange={(e) => setRnSt(e.target.value)} />
+          <Button size="sm" onClick={() => {
+            addStavka.mutate({
+              nalogId: id,
+              garazniBroj: garazniBroj || undefined,
+              tipVozila: tipVozila || undefined,
+              linija: linija || undefined,
+              skidanjeM2: skidanje === "" ? undefined : (skidanje as number),
+              montazaM2: montaza === "" ? undefined : (montaza as number),
+              rnStamparije: rnSt || undefined,
+            });
+            setGB(""); setTipVozila(""); setLinija(""); setSkidanje(""); setMontaza(""); setRnSt("");
+          }}>+</Button>
         </div>
 
         <section className="mt-12 grid grid-cols-3 gap-8 text-xs">

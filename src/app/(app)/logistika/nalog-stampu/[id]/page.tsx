@@ -16,31 +16,32 @@ const STATUS_TONE: Record<string, any> = {
   OTKAZANO: "danger",
 };
 
-const MATERIJALI = ["FOLIJA_3M_IJ20", "PAPIR_130GR", "PAPIR_SV", "PAPIR_DUPLEKS", "DRUGO"];
-
 export default function NalogStampuDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { data, isLoading, refetch } = trpc.nalogStampu.byId.useQuery({ id });
+  const folije = trpc.logistikaLookups.folije.list.useQuery();
+  const dorade = trpc.logistikaLookups.dorade.list.useQuery();
+  const masine = trpc.logistikaLookups.masine.list.useQuery();
+
   const addStavka = trpc.nalogStampu.addStavka.useMutation({ onSuccess: () => refetch() });
   const removeStavka = trpc.nalogStampu.removeStavka.useMutation({ onSuccess: () => refetch() });
   const setStatus = trpc.nalogStampu.setStatus.useMutation({ onSuccess: () => refetch() });
+  const update = trpc.nalogStampu.update.useMutation({ onSuccess: () => refetch() });
   const remove = trpc.nalogStampu.remove.useMutation({ onSuccess: () => router.push(`/logistika/radni-nalozi/${data?.radniNalogId}`) });
 
-  const [grad, setGrad] = useState("BG");
-  const [resOznaka, setResOznaka] = useState("R01");
-  const [simpleks, setSimpleks] = useState(true);
-  const [format, setFormat] = useState("47x77 sv");
+  // form state for new stavka (HIGER kolone)
+  const [fileNaziv, setFileNaziv] = useState("");
+  const [formatX, setFormatX] = useState<number | "">("");
+  const [formatY, setFormatY] = useState<number | "">("");
   const [tiraz, setTiraz] = useState(1);
-  const [materijal, setMaterijal] = useState("PAPIR_SV");
-  const [gramatura, setGramatura] = useState("");
-  const [dorada, setDorada] = useState("BEZ LAMINACIJE");
+  const [folijaId, setFolijaId] = useState("");
+  const [doradaId, setDoradaId] = useState("");
 
   if (isLoading) return <p>Učitavam...</p>;
   if (!data) return <p>Nalog ne postoji.</p>;
 
   const radniNalog: any = data.radniNalog;
-  const ukupno = data.stavke.reduce((sum: number, s: any) => sum + Number(s.cenaUkupno ?? 0), 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -49,7 +50,7 @@ export default function NalogStampuDetail() {
           <Link href={`/logistika/radni-nalozi/${data.radniNalogId}`} className="text-sm text-muted-foreground hover:underline">← Nazad na RN</Link>
           <Badge variant={STATUS_TONE[data.status]}>{data.status}</Badge>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={() => window.print()}>🖨️ Štampaj</Button>
           {data.status === "NACRT" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "POSLATO" })}>Pošalji štampariji</Button>}
           {data.status === "POSLATO" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "POSTAVLJENO" })}>Završeno</Button>}
@@ -57,6 +58,39 @@ export default function NalogStampuDetail() {
         </div>
       </div>
 
+      {/* Header edit panel (no-print) */}
+      <div className="no-print rounded-md border bg-white p-3">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+          <input
+            className="rounded border px-2 py-1.5 text-sm"
+            placeholder="Naziv kampanje (FAIRY HIGER - 2 kom)"
+            defaultValue={data.kampanjaNaziv ?? ""}
+            onBlur={(e) => update.mutate({ id, kampanjaNaziv: e.target.value })}
+          />
+          <select
+            className="rounded border px-2 py-1.5 text-sm"
+            defaultValue={data.masinaId ?? ""}
+            onChange={(e) => update.mutate({ id, masinaId: e.target.value || null })}
+          >
+            <option value="">— mašina —</option>
+            {masine.data?.map((m: any) => <option key={m.id} value={m.id}>{m.naziv}</option>)}
+          </select>
+          <input
+            className="rounded border px-2 py-1.5 text-sm"
+            placeholder="RN štamparije (broj koji vrati štamparija)"
+            defaultValue={data.rnStamparije ?? ""}
+            onBlur={(e) => update.mutate({ id, rnStamparije: e.target.value })}
+          />
+          <input
+            className="rounded border px-2 py-1.5 text-sm"
+            placeholder="Rok izrade vreme (DO 14H)"
+            defaultValue={data.rokIzradeTime ?? ""}
+            onBlur={(e) => update.mutate({ id, rokIzradeTime: e.target.value })}
+          />
+        </div>
+      </div>
+
+      {/* Print A4 */}
       <div className="print-area mx-auto w-full max-w-4xl rounded-md border bg-white p-10 shadow-sm text-sm text-black print:border-0 print:shadow-none">
         <header className="mb-6 flex items-start justify-between border-b-4 border-red-700 pb-4">
           <div>
@@ -68,7 +102,8 @@ export default function NalogStampuDetail() {
             <div className="text-2xl font-bold uppercase">Nalog za štampu</div>
             <div className="mt-1 text-xs">Broj: <span className="font-mono font-semibold">{data.broj}</span></div>
             <div className="text-xs">Štamparija: <strong>{data.stamparija}</strong></div>
-            <div className="text-xs">Predaja: {formatDate(data.datumPredaje)} · Rok: {formatDate(data.rokIzrade)} {data.rokIzradeTime ?? ""}</div>
+            <div className="text-xs">Datum: {formatDate(data.datumPredaje)} · Rok: {formatDate(data.rokIzrade)} {data.rokIzradeTime ?? ""}</div>
+            {data.rnStamparije && <div className="text-xs">RN štamparije: <span className="font-mono">{data.rnStamparije}</span></div>}
           </div>
         </header>
 
@@ -80,8 +115,9 @@ export default function NalogStampuDetail() {
             <div>Period kampanje: {formatDate(radniNalog?.odDatum)} — {formatDate(radniNalog?.doDatum)}</div>
           </div>
           <div>
-            <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">Mašina / Napomena</div>
-            <div>{data.masina ?? "—"}</div>
+            <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">Kampanja / Mašina</div>
+            <div className="text-sm font-semibold">{data.kampanjaNaziv ?? "—"}</div>
+            <div>MAŠINA: <strong>{data.masinaRef?.naziv ?? data.masina ?? "—"}</strong></div>
             {data.napomena && <div className="mt-1 text-[11px] text-gray-600">{data.napomena}</div>}
           </div>
         </section>
@@ -93,67 +129,74 @@ export default function NalogStampuDetail() {
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="bg-gray-100">
-              <th className="border px-2 py-1 text-left">Grad</th>
-              <th className="border px-2 py-1 text-left">Rešenje</th>
-              <th className="border px-2 py-1 text-left">Tip</th>
-              <th className="border px-2 py-1 text-left">Format</th>
+              <th className="border px-2 py-1 text-center">#</th>
+              <th className="border px-2 py-1 text-left">File</th>
+              <th className="border px-2 py-1 text-right">Format X (cm)</th>
+              <th className="border px-2 py-1 text-right">Format Y (cm)</th>
               <th className="border px-2 py-1 text-right">Tiraž</th>
-              <th className="border px-2 py-1 text-left">Materijal</th>
+              <th className="border px-2 py-1 text-left">FOLIJA</th>
               <th className="border px-2 py-1 text-left">Dorada</th>
-              <th className="border px-2 py-1 text-right">Cena/kom</th>
-              <th className="border px-2 py-1 text-right">Ukupno</th>
               <th className="no-print border px-2 py-1"></th>
             </tr>
           </thead>
           <tbody>
             {data.stavke.length === 0 && (
-              <tr><td colSpan={10} className="border px-2 py-3 text-center text-muted-foreground">Nema stavki</td></tr>
+              <tr><td colSpan={8} className="border px-2 py-3 text-center text-muted-foreground">Nema stavki — dodaj ispod</td></tr>
             )}
-            {data.stavke.map((s: any) => (
+            {data.stavke.map((s: any, i: number) => (
               <tr key={s.id}>
-                <td className="border px-2 py-1">{s.grad}</td>
-                <td className="border px-2 py-1">{s.resenje?.oznaka ?? s.resenjeOznaka ?? "—"}</td>
-                <td className="border px-2 py-1">{s.simpleks ? "simpleks" : "dupleks"}</td>
-                <td className="border px-2 py-1 font-mono">{s.format}</td>
+                <td className="border px-2 py-1 text-center">{s.redniBr ?? i + 1}</td>
+                <td className="border px-2 py-1">{s.fileNaziv ?? s.format}</td>
+                <td className="border px-2 py-1 text-right">{s.formatX ? Number(s.formatX) : "—"}</td>
+                <td className="border px-2 py-1 text-right">{s.formatY ? Number(s.formatY) : "—"}</td>
                 <td className="border px-2 py-1 text-right">{s.tiraz}</td>
-                <td className="border px-2 py-1">{s.materijal}{s.gramatura ? ` ${s.gramatura}` : ""}</td>
-                <td className="border px-2 py-1">{s.dorada ?? "—"}</td>
-                <td className="border px-2 py-1 text-right">{s.cenaJedinicna ? Number(s.cenaJedinicna).toFixed(2) : "—"}</td>
-                <td className="border px-2 py-1 text-right">{s.cenaUkupno ? Number(s.cenaUkupno).toFixed(2) : "—"}</td>
+                <td className="border px-2 py-1">{s.folijaRef?.naziv ?? s.materijal ?? "—"}</td>
+                <td className="border px-2 py-1">{s.doradaRef?.naziv ?? s.dorada ?? "—"}</td>
                 <td className="no-print border px-2 py-1">
                   <button className="text-[10px] text-red-600 hover:underline" onClick={() => removeStavka.mutate({ stavkaId: s.id })}>×</button>
                 </td>
               </tr>
             ))}
-            {data.stavke.length > 0 && (
-              <tr className="bg-gray-50 font-semibold">
-                <td colSpan={8} className="border px-2 py-1 text-right">UKUPNO</td>
-                <td className="border px-2 py-1 text-right">{ukupno.toFixed(2)}</td>
-                <td className="no-print border px-2 py-1"></td>
-              </tr>
-            )}
           </tbody>
         </table>
 
-        {/* Add stavka inline */}
-        <div className="no-print mt-3 grid grid-cols-9 gap-1 text-xs">
-          <input className="rounded border px-2 py-1" placeholder="Grad" value={grad} onChange={(e) => setGrad(e.target.value)} />
-          <input className="rounded border px-2 py-1" placeholder="R01" value={resOznaka} onChange={(e) => setResOznaka(e.target.value)} />
-          <select className="rounded border px-2 py-1" value={simpleks ? "1" : "0"} onChange={(e) => setSimpleks(e.target.value === "1")}>
-            <option value="1">simpleks</option>
-            <option value="0">dupleks</option>
-          </select>
-          <input className="rounded border px-2 py-1" placeholder="47x77 sv" value={format} onChange={(e) => setFormat(e.target.value)} />
+        {/* Add stavka inline (HIGER kolone) */}
+        <div className="no-print mt-3 grid grid-cols-7 gap-1 text-xs">
+          <input className="rounded border px-2 py-1 col-span-2" placeholder="File (155X105 - RAM - HIG crv)" value={fileNaziv} onChange={(e) => setFileNaziv(e.target.value)} />
+          <input type="number" className="rounded border px-2 py-1" placeholder="X cm" value={formatX} onChange={(e) => setFormatX(e.target.value === "" ? "" : Number(e.target.value))} />
+          <input type="number" className="rounded border px-2 py-1" placeholder="Y cm" value={formatY} onChange={(e) => setFormatY(e.target.value === "" ? "" : Number(e.target.value))} />
           <input type="number" className="rounded border px-2 py-1" placeholder="Tiraž" value={tiraz} onChange={(e) => setTiraz(Number(e.target.value))} />
-          <select className="rounded border px-2 py-1" value={materijal} onChange={(e) => setMaterijal(e.target.value)}>
-            {MATERIJALI.map((m) => <option key={m}>{m}</option>)}
+          <select className="rounded border px-2 py-1" value={folijaId} onChange={(e) => setFolijaId(e.target.value)}>
+            <option value="">— folija —</option>
+            {folije.data?.map((f: any) => <option key={f.id} value={f.id}>{f.naziv}</option>)}
           </select>
-          <input className="rounded border px-2 py-1" placeholder="gramatura" value={gramatura} onChange={(e) => setGramatura(e.target.value)} />
-          <input className="rounded border px-2 py-1" placeholder="dorada" value={dorada} onChange={(e) => setDorada(e.target.value)} />
-          <Button size="sm" onClick={() => {
-            addStavka.mutate({ nalogId: id, grad, resenjeOznaka: resOznaka, simpleks, format, tiraz, materijal: materijal as any, gramatura: gramatura || undefined, dorada: dorada || undefined });
-          }}>+</Button>
+          <select className="rounded border px-2 py-1" value={doradaId} onChange={(e) => setDoradaId(e.target.value)}>
+            <option value="">— dorada —</option>
+            {dorade.data?.map((d: any) => <option key={d.id} value={d.id}>{d.naziv}</option>)}
+          </select>
         </div>
+        <div className="no-print mt-2">
+          <Button size="sm" disabled={!fileNaziv} onClick={() => {
+            const formatLegacy = formatX && formatY ? `${formatX}x${formatY}` : (fileNaziv || "—");
+            addStavka.mutate({
+              nalogId: id,
+              grad: "BG",
+              fileNaziv,
+              formatX: formatX === "" ? undefined : (formatX as number),
+              formatY: formatY === "" ? undefined : (formatY as number),
+              tiraz,
+              folijaId: folijaId || undefined,
+              doradaId: doradaId || undefined,
+              format: formatLegacy,
+              materijal: "DRUGO" as any,
+            });
+            setFileNaziv(""); setFormatX(""); setFormatY(""); setTiraz(1); setFolijaId(""); setDoradaId("");
+          }}>+ Dodaj stavku</Button>
+        </div>
+
+        <p className="mt-4 text-[10px] uppercase tracking-wider text-gray-600 print:block">
+          OBAVEZNO ODŠTAMPATI UPUTSTVA I PREVIEW NA PAPIRU MINIMALNE VELIČINE A3
+        </p>
 
         <section className="mt-12 grid grid-cols-3 gap-8 text-xs">
           <div className="border-t-2 border-gray-400 pt-2 text-center">
