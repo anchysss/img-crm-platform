@@ -216,31 +216,39 @@ function CampaignsWidget({ items }: { items: any[] }) {
                   : k.status === "ZAVRSENA" ? "bg-gray-300"
                   : "bg-orange-400";
                 return (
-                  <div key={k.id} className="relative flex h-7 flex-col gap-px rounded bg-secondary/20">
+                  <div key={k.id} className="relative flex h-10 flex-col gap-1 rounded bg-secondary/10 p-0.5">
                     {/* Outdoor stripe (gornja) */}
-                    <div className="relative h-1/2">
-                      {k.hasOutdoor && (
+                    <div className="relative h-1/2 rounded-sm bg-secondary/30">
+                      {k.hasOutdoor ? (
                         <Link
                           href={`/logistika/kampanje/${k.id}`}
-                          className={`absolute flex h-full items-center rounded-t px-1.5 text-[9px] font-medium text-white hover:opacity-90 ${outdoorCls}`}
+                          className={`absolute flex h-full items-center rounded-sm px-1.5 text-[9px] font-semibold text-white hover:opacity-90 ${outdoorCls}`}
                           style={{ left: `${left}%`, width: `${width}%` }}
                           title={`OUTDOOR · ${k.naziv} · ${k.partner} · ${formatDate(k.odDatum)} → ${formatDate(k.doDatum)}`}
                         >
                           <span className="truncate">O · {k.naziv}</span>
                         </Link>
+                      ) : (
+                        <div className="absolute flex h-full items-center px-1.5 text-[9px] italic text-muted-foreground" style={{ left: `${left}%`, width: `${width}%` }}>
+                          O · —
+                        </div>
                       )}
                     </div>
                     {/* Indoor stripe (donja) */}
-                    <div className="relative h-1/2">
-                      {k.hasIndoor && (
+                    <div className="relative h-1/2 rounded-sm bg-secondary/30">
+                      {k.hasIndoor ? (
                         <Link
                           href={`/logistika/kampanje/${k.id}`}
-                          className={`absolute flex h-full items-center rounded-b px-1.5 text-[9px] font-medium text-white hover:opacity-90 ${indoorCls}`}
+                          className={`absolute flex h-full items-center rounded-sm px-1.5 text-[9px] font-semibold text-white hover:opacity-90 ${indoorCls}`}
                           style={{ left: `${left}%`, width: `${width}%` }}
                           title={`INDOOR · ${k.naziv} · ${k.partner} · ${formatDate(k.odDatum)} → ${formatDate(k.doDatum)}`}
                         >
                           <span className="truncate">I · {k.naziv}</span>
                         </Link>
+                      ) : (
+                        <div className="absolute flex h-full items-center px-1.5 text-[9px] italic text-muted-foreground" style={{ left: `${left}%`, width: `${width}%` }}>
+                          I · —
+                        </div>
                       )}
                     </div>
                   </div>

@@ -11,7 +11,7 @@ const SECTIONS: NavSection[] = [
   {
     title: "",
     items: [
-      { href: "/dashboard", label: "🏠  Danas" },
+      { href: "/dashboard", label: "📊  Dashboard" },
       { href: "/notifications", label: "🔔  Notifikacije" },
     ],
   },
