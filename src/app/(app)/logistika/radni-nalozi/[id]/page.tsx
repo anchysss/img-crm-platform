@@ -178,12 +178,17 @@ export default function RadniNalogDetail() {
               createMontaza.mutate({ radniNalogId: id, tip: tip as any, grad });
             }}>+ Nalog za montažu</Button>
             <Button size="sm" variant="outline" onClick={() => {
+              const tipStampe = (prompt("Tip štampe: PROBNA (kolorna proba) ili REDOVNA", "REDOVNA") || "").toUpperCase();
+              if (!["PROBNA","REDOVNA"].includes(tipStampe)) return;
               const stamparija = (prompt("Štamparija: DPC_BEOGRAD / STAMPARIJA_NIS / DRUGA", "DPC_BEOGRAD") || "").toUpperCase();
               if (!["DPC_BEOGRAD","STAMPARIJA_NIS","DRUGA"].includes(stamparija)) return;
-              const today = new Date(); const rok = new Date(today); rok.setDate(rok.getDate() + 3);
+              const today = new Date();
+              const rok = new Date(today);
+              rok.setDate(rok.getDate() + (tipStampe === "PROBNA" ? 1 : 3));
               createStampa.mutate({
                 radniNalogId: id,
                 stamparija: stamparija as any,
+                tipStampe: tipStampe as any,
                 datumPredaje: today,
                 rokIzrade: rok,
               });
@@ -247,7 +252,9 @@ export default function RadniNalogDetail() {
                 {data.stampe.map((n: any) => (
                   <li key={n.id}>
                     <Link href={`/logistika/nalog-stampu/${n.id}`} className="font-mono text-red-700 hover:underline">{n.broj}</Link>
-                    <span className="ml-2 text-muted-foreground">[{n.stamparija}] · {n._count?.stavke ?? 0} stavki · {n.status}</span>
+                    <span className="ml-2 text-muted-foreground">
+                      [{n.tipStampe ?? "REDOVNA"} · {n.stamparija}] · {n._count?.stavke ?? 0} stavki · {n.status}
+                    </span>
                   </li>
                 ))}
               </ul>

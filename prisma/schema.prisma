@@ -1166,6 +1166,7 @@ model NalogStampu {
   broj          String
   kampanjaNaziv String? // "FAIRY HIGER - 2 kom"
   stamparija    StamparijaTip
+  tipStampe     TipStampe         @default(REDOVNA) // PROBNA / REDOVNA
   datumPredaje  DateTime
   rokIzrade     DateTime
   rokIzradeTime String? // "DO 14H"
@@ -1190,6 +1191,11 @@ enum StamparijaTip {
   DPC_BEOGRAD
   STAMPARIJA_NIS
   DRUGA
+}
+
+enum TipStampe {
+  PROBNA // probna štampa (kolorna proba)
+  REDOVNA // redovna produkciona štampa
 }
 
 enum MaterijalTip {

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { tenantWhere, ensureTenant } from "../tenant";
 import { audit } from "../audit";
 import { AppError } from "../errors";
-import { StamparijaTip, MaterijalTip, NalogStavkaStatus } from "@prisma/client";
+import { StamparijaTip, MaterijalTip, NalogStavkaStatus, TipStampe } from "@prisma/client";
 
 const stavkaInput = z.object({
   redniBr: z.coerce.number().int().optional(),
@@ -69,6 +69,7 @@ export const nalogStampuRouter = router({
       radniNalogId: z.string().cuid(),
       kampanjaNaziv: z.string().optional(),
       stamparija: z.nativeEnum(StamparijaTip),
+      tipStampe: z.nativeEnum(TipStampe).default("REDOVNA"),
       datumPredaje: z.coerce.date(),
       rokIzrade: z.coerce.date(),
       rokIzradeTime: z.string().optional(),
@@ -87,7 +88,8 @@ export const nalogStampuRouter = router({
     const sufixStamparija =
       input.stamparija === "DPC_BEOGRAD" ? "-DPC" :
       input.stamparija === "STAMPARIJA_NIS" ? "-NIS" : "-DRUGA";
-    const broj = `${rn.broj}-STAMPA${sufixStamparija}-${cnt + 1}`;
+    const sufixTip = input.tipStampe === "PROBNA" ? "-PROBA" : "";
+    const broj = `${rn.broj}-STAMPA${sufixStamparija}${sufixTip}-${cnt + 1}`;
 
     const created = await prisma.nalogStampu.create({
       data: {
@@ -96,6 +98,7 @@ export const nalogStampuRouter = router({
         broj,
         kampanjaNaziv: input.kampanjaNaziv,
         stamparija: input.stamparija,
+        tipStampe: input.tipStampe,
         datumPredaje: input.datumPredaje,
         rokIzrade: input.rokIzrade,
         rokIzradeTime: input.rokIzradeTime,

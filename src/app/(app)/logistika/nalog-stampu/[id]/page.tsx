@@ -101,7 +101,12 @@ export default function NalogStampuDetail() {
           <div className="text-right">
             <div className="text-2xl font-bold uppercase">Nalog za štampu</div>
             <div className="mt-1 text-xs">Broj: <span className="font-mono font-semibold">{data.broj}</span></div>
-            <div className="text-xs">Štamparija: <strong>{data.stamparija}</strong></div>
+            <div className="text-xs">
+              Štamparija: <strong>{data.stamparija}</strong>
+              <span className="ml-2 inline-block rounded-sm border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                {(data as any).tipStampe ?? "REDOVNA"} ŠTAMPA
+              </span>
+            </div>
             <div className="text-xs">Datum: {formatDate(data.datumPredaje)} · Rok: {formatDate(data.rokIzrade)} {data.rokIzradeTime ?? ""}</div>
             {data.rnStamparije && <div className="text-xs">RN štamparije: <span className="font-mono">{data.rnStamparije}</span></div>}
           </div>
