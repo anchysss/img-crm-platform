@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { tenantWhere, ensureTenant } from "../tenant";
 import { audit } from "../audit";
 import { AppError } from "../errors";
-import { KampanjaStatus, RezervacijaStatus } from "@prisma/client";
+import { KampanjaStatus, RezervacijaStatus, PozicijaTip } from "@prisma/client";
 
 export const campaignsRouter = router({
   create: withPermission("campaigns", "CREATE").input(
@@ -18,7 +18,11 @@ export const campaignsRouter = router({
       ponudaId: z.string().cuid().optional(),
       napomene: z.string().optional(),
       stavke: z.array(z.object({
-        pozicijaId: z.string().cuid(),
+        // Podržava ili pozicijaId direktno, ili voziloId + pozicijaTip
+        // (server kreira poziciju ako ne postoji)
+        pozicijaId: z.string().cuid().optional(),
+        voziloId: z.string().cuid().optional(),
+        pozicijaTip: z.nativeEnum(PozicijaTip).optional(),
         odDatum: z.coerce.date(),
         doDatum: z.coerce.date(),
         cena: z.string(),
@@ -46,21 +50,52 @@ export const campaignsRouter = router({
 
     if (input.stavke && input.stavke.length > 0) {
       for (const s of input.stavke) {
+        // Razreši pozicijaId: ili je dat, ili pronađi/kreiraj za vozilo+tip
+        let pozicijaId = s.pozicijaId;
+        if (!pozicijaId && s.voziloId && s.pozicijaTip) {
+          let poz = await prisma.pozicija.findFirst({
+            where: { voziloId: s.voziloId, tip: s.pozicijaTip },
+          });
+          if (!poz) {
+            poz = await prisma.pozicija.create({
+              data: {
+                voziloId: s.voziloId,
+                tip: s.pozicijaTip,
+                dimenzije: s.pozicijaTip === "UNUTRA" ? "unutrašnji branding" : "celo vozilo",
+                minPeriodDana: 7,
+                cenaPoPeriodu: 0,
+                valuta: input.valuta,
+              },
+            });
+          }
+          pozicijaId = poz.id;
+        }
+        if (!pozicijaId) continue;
+
         // Konflikt check
         const conflict = await prisma.rezervacija.findFirst({
           where: {
-            pozicijaId: s.pozicijaId,
+            pozicijaId,
             status: { in: [RezervacijaStatus.CONFIRMED, RezervacijaStatus.RUNNING, RezervacijaStatus.HOLD] },
             odDatum: { lte: s.doDatum },
             doDatum: { gte: s.odDatum },
           },
         });
-        if (conflict) continue; // skip ako je zauzeto
+        if (conflict) continue;
         await prisma.$transaction([
-          prisma.kampanjaStavka.create({ data: { ...s, kampanjaId: created.id, valuta: input.valuta } }),
+          prisma.kampanjaStavka.create({
+            data: {
+              kampanjaId: created.id,
+              pozicijaId,
+              odDatum: s.odDatum,
+              doDatum: s.doDatum,
+              cena: s.cena,
+              valuta: input.valuta,
+            },
+          }),
           prisma.rezervacija.create({
             data: {
-              pozicijaId: s.pozicijaId,
+              pozicijaId,
               kampanjaId: created.id,
               status: RezervacijaStatus.CONFIRMED,
               odDatum: s.odDatum,

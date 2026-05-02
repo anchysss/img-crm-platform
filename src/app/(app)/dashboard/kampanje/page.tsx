@@ -23,7 +23,7 @@ type ViewMode = "daily" | "weekly" | "monthly" | "yearly" | "custom";
 
 interface DragState {
   voziloId: string;
-  pozicijaId: string;
+  pozicijaId: string | null; // null kad vozilo nema poziciju → server kreira
   tipLabel: "Outdoor" | "Indoor";
   startPct: number;
   endPct: number;
@@ -90,7 +90,7 @@ export default function KampanjeChartPage() {
   function pctToDate(pct: number): Date {
     return new Date(past + (total * pct) / 100);
   }
-  function startDrag(voziloId: string, pozicijaId: string, tipLabel: "Outdoor" | "Indoor", e: React.MouseEvent<HTMLDivElement>) {
+  function startDrag(voziloId: string, pozicijaId: string | null, tipLabel: "Outdoor" | "Indoor", e: React.MouseEvent<HTMLDivElement>) {
     if ((e.target as HTMLElement).closest("a")) return;
     const pct = pctFromMouse(e);
     setDrag({ voziloId, pozicijaId, tipLabel, startPct: pct, endPct: pct });
@@ -107,8 +107,15 @@ export default function KampanjeChartPage() {
       setDrag(null);
       return;
     }
-    setDialogPrefill({
+    // Ako pozicija postoji, prosledi pozicijaId; inače voziloId+tip da je server kreira
+    setDialogPrefill(drag.pozicijaId ? {
       pozicijaId: drag.pozicijaId,
+      odDatum: pctToDate(a),
+      doDatum: pctToDate(b),
+      tipLabel: drag.tipLabel,
+    } : {
+      voziloId: drag.voziloId,
+      pozicijaTip: drag.tipLabel === "Outdoor" ? "CELO_VOZILO" : "UNUTRA",
       odDatum: pctToDate(a),
       doDatum: pctToDate(b),
       tipLabel: drag.tipLabel,
@@ -201,14 +208,14 @@ export default function KampanjeChartPage() {
 
                   {/* Desno: 2 reda (outdoor + indoor) */}
                   <div className="flex flex-1 flex-col gap-0.5">
-                    {/* OUTDOOR red — blago plav background */}
+                    {/* OUTDOOR red — blago plav background. Drag radi i bez postojeće pozicije (server kreira) */}
                     <div
-                      className={`relative h-5 rounded-r-sm bg-blue-50/60 select-none ${v.outdoorPozicijaId ? "cursor-crosshair hover:bg-blue-100/60" : "opacity-50"}`}
-                      onMouseDown={(e) => v.outdoorPozicijaId && startDrag(v.id, v.outdoorPozicijaId, "Outdoor", e)}
+                      className="relative h-5 rounded-r-sm bg-blue-50/60 select-none cursor-crosshair hover:bg-blue-100/60"
+                      onMouseDown={(e) => startDrag(v.id, v.outdoorPozicijaId ?? null, "Outdoor", e)}
                       onMouseMove={onMouseMove}
                       onMouseUp={endDrag}
                       onMouseLeave={() => isDraggingThis && drag?.tipLabel === "Outdoor" && endDrag()}
-                      title={v.outdoorPozicijaId ? "Klikni i povuci za novu Outdoor kampanju" : "Vozilo nema outdoor poziciju"}
+                      title="Klikni i povuci za novu Outdoor kampanju"
                     >
                       {nowInRange && <div className="pointer-events-none absolute top-0 z-10 h-full w-px bg-destructive" style={{ left: `${nowOffset}%` }} />}
                       {v.outdoor.length === 0 && !(isDraggingThis && drag?.tipLabel === "Outdoor") && (
@@ -240,14 +247,14 @@ export default function KampanjeChartPage() {
                       )}
                     </div>
 
-                    {/* INDOOR red — blago indigo background */}
+                    {/* INDOOR red — blago indigo background. Drag radi i bez postojeće pozicije (server kreira) */}
                     <div
-                      className={`relative h-5 rounded-r-sm bg-indigo-50/60 select-none ${v.indoorPozicijaId ? "cursor-crosshair hover:bg-indigo-100/60" : "opacity-50"}`}
-                      onMouseDown={(e) => v.indoorPozicijaId && startDrag(v.id, v.indoorPozicijaId, "Indoor", e)}
+                      className="relative h-5 rounded-r-sm bg-indigo-50/60 select-none cursor-crosshair hover:bg-indigo-100/60"
+                      onMouseDown={(e) => startDrag(v.id, v.indoorPozicijaId ?? null, "Indoor", e)}
                       onMouseMove={onMouseMove}
                       onMouseUp={endDrag}
                       onMouseLeave={() => isDraggingThis && drag?.tipLabel === "Indoor" && endDrag()}
-                      title={v.indoorPozicijaId ? "Klikni i povuci za novu Indoor kampanju" : "Vozilo nema indoor poziciju"}
+                      title="Klikni i povuci za novu Indoor kampanju"
                     >
                       {nowInRange && <div className="pointer-events-none absolute top-0 z-10 h-full w-px bg-destructive" style={{ left: `${nowOffset}%` }} />}
                       {v.indoor.length === 0 && !(isDraggingThis && drag?.tipLabel === "Indoor") && (
