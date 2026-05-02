@@ -31,42 +31,120 @@ interface DragState {
 
 function isoDate(d: Date) { return d.toISOString().slice(0, 10); }
 
-function getRange(mode: ViewMode, customFrom: string, customTo: string): { from: Date; to: Date } {
-  const now = new Date();
+const SR_MONTHS = ["Januar", "Februar", "Mart", "April", "Maj", "Jun", "Jul", "Avgust", "Septembar", "Oktobar", "Novembar", "Decembar"];
+
+function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+function endOfDay(d: Date) { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; }
+function startOfWeek(d: Date) { const x = startOfDay(d); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); return x; } // Mon
+function endOfWeek(d: Date) { const x = startOfWeek(d); x.setDate(x.getDate() + 6); return endOfDay(x); }
+function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0); }
+function endOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999); }
+function startOfYear(d: Date) { return new Date(d.getFullYear(), 0, 1, 0, 0, 0, 0); }
+function endOfYear(d: Date) { return new Date(d.getFullYear(), 11, 31, 23, 59, 59, 999); }
+
+function getRange(mode: ViewMode, anchor: Date, customFrom: string, customTo: string): { from: Date; to: Date } {
   switch (mode) {
-    case "daily": {
-      const from = new Date(now); from.setDate(from.getDate() - 3); from.setHours(0, 0, 0, 0);
-      const to = new Date(now); to.setDate(to.getDate() + 3); to.setHours(23, 59, 59, 999);
-      return { from, to };
-    }
-    case "weekly": {
-      const from = new Date(now); from.setDate(from.getDate() - 7);
-      const to = new Date(now); to.setDate(to.getDate() + 21);
-      return { from, to };
-    }
-    case "monthly": {
-      const from = new Date(now); from.setMonth(from.getMonth() - 1);
-      const to = new Date(now); to.setMonth(to.getMonth() + 2);
-      return { from, to };
-    }
-    case "yearly": {
-      const from = new Date(now); from.setMonth(from.getMonth() - 3);
-      const to = new Date(now); to.setMonth(to.getMonth() + 9);
-      return { from, to };
-    }
+    case "daily": return { from: startOfDay(anchor), to: endOfDay(anchor) };
+    case "weekly": return { from: startOfWeek(anchor), to: endOfWeek(anchor) };
+    case "monthly": return { from: startOfMonth(anchor), to: endOfMonth(anchor) };
+    case "yearly": return { from: startOfYear(anchor), to: endOfYear(anchor) };
     case "custom":
       return {
-        from: customFrom ? new Date(customFrom) : new Date(now.getTime() - 30 * 86400000),
-        to: customTo ? new Date(customTo) : new Date(now.getTime() + 90 * 86400000),
+        from: customFrom ? new Date(customFrom) : startOfDay(new Date()),
+        to: customTo ? endOfDay(new Date(customTo)) : endOfDay(new Date(Date.now() + 30 * 86400000)),
       };
   }
 }
 
+function shiftAnchor(mode: ViewMode, anchor: Date, dir: -1 | 1): Date {
+  const x = new Date(anchor);
+  switch (mode) {
+    case "daily": x.setDate(x.getDate() + dir); break;
+    case "weekly": x.setDate(x.getDate() + 7 * dir); break;
+    case "monthly": x.setMonth(x.getMonth() + dir); break;
+    case "yearly": x.setFullYear(x.getFullYear() + dir); break;
+  }
+  return x;
+}
+
+function buildTicks(mode: ViewMode, monthlyGranul: "weeks" | "days", from: Date, to: Date): Array<{ pct: number; label: string }> {
+  const total = to.getTime() - from.getTime();
+  const ticks: Array<{ pct: number; label: string }> = [];
+  const pct = (d: Date) => ((d.getTime() - from.getTime()) / total) * 100;
+
+  if (mode === "daily") {
+    // Sati 0, 6, 12, 18, 24
+    for (let h = 0; h <= 24; h += 6) {
+      const t = new Date(from); t.setHours(h, 0, 0, 0);
+      ticks.push({ pct: pct(t), label: `${h}h` });
+    }
+  } else if (mode === "weekly") {
+    const days = ["Po", "Ut", "Sr", "Čet", "Pe", "Su", "Ne"];
+    for (let i = 0; i < 7; i++) {
+      const t = new Date(from); t.setDate(t.getDate() + i);
+      ticks.push({ pct: pct(t), label: `${days[i]} ${t.getDate()}.` });
+    }
+  } else if (mode === "monthly") {
+    if (monthlyGranul === "days") {
+      const dayCount = Math.round(total / 86400000);
+      const step = dayCount > 20 ? 5 : 1;
+      for (let i = 0; i <= dayCount; i += step) {
+        const t = new Date(from); t.setDate(t.getDate() + i);
+        ticks.push({ pct: pct(t), label: `${t.getDate()}.` });
+      }
+    } else {
+      // Po nedeljama — start of each ISO week within range
+      let w = new Date(from);
+      const dow = (w.getDay() + 6) % 7;
+      w.setDate(w.getDate() - dow);
+      let n = 1;
+      while (w <= to) {
+        ticks.push({ pct: Math.max(0, pct(w)), label: `N${n} (${w.getDate()}.)` });
+        w = new Date(w); w.setDate(w.getDate() + 7);
+        n++;
+      }
+    }
+  } else if (mode === "yearly") {
+    for (let m = 0; m < 12; m++) {
+      const t = new Date(from.getFullYear(), m, 1);
+      ticks.push({ pct: pct(t), label: SR_MONTHS[m].slice(0, 3) });
+    }
+  } else if (mode === "custom") {
+    const days = Math.round(total / 86400000);
+    const step = Math.max(1, Math.floor(days / 8));
+    for (let i = 0; i <= days; i += step) {
+      const t = new Date(from); t.setDate(t.getDate() + i);
+      ticks.push({ pct: pct(t), label: t.toLocaleDateString("sr-Latn") });
+    }
+  }
+  return ticks;
+}
+
+function rangeLabel(mode: ViewMode, anchor: Date, range: { from: Date; to: Date }): string {
+  switch (mode) {
+    case "daily":
+      return anchor.toLocaleDateString("sr-Latn", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    case "weekly": {
+      return `${range.from.toLocaleDateString("sr-Latn")} — ${range.to.toLocaleDateString("sr-Latn")}`;
+    }
+    case "monthly": return `${SR_MONTHS[anchor.getMonth()]} ${anchor.getFullYear()}`;
+    case "yearly": return String(anchor.getFullYear());
+    case "custom": return `${range.from.toLocaleDateString("sr-Latn")} — ${range.to.toLocaleDateString("sr-Latn")}`;
+  }
+}
+
+type MonthlyGranul = "weeks" | "days";
+
 export default function KampanjeChartPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("monthly");
+  const [anchorDate, setAnchorDate] = useState<Date>(() => new Date());
+  const [monthlyGranul, setMonthlyGranul] = useState<MonthlyGranul>("days");
   const [customFrom, setCustomFrom] = useState(isoDate(new Date()));
   const [customTo, setCustomTo] = useState(isoDate(new Date(Date.now() + 30 * 86400000)));
-  const range = useMemo(() => getRange(viewMode, customFrom, customTo), [viewMode, customFrom, customTo]);
+  const range = useMemo(() => getRange(viewMode, anchorDate, customFrom, customTo), [viewMode, anchorDate, customFrom, customTo]);
+
+  function shift(dir: -1 | 1) { setAnchorDate((a) => shiftAnchor(viewMode, a, dir)); }
+  function resetToToday() { setAnchorDate(new Date()); }
 
   const { data, isLoading, refetch } = trpc.dashboard.voziloKampanjeChart.useQuery({
     from: range.from,
@@ -132,7 +210,7 @@ export default function KampanjeChartPage() {
           {(["daily", "weekly", "monthly", "yearly", "custom"] as ViewMode[]).map((m) => (
             <button
               key={m}
-              onClick={() => setViewMode(m)}
+              onClick={() => { setViewMode(m); if (m !== "custom") setAnchorDate(new Date()); }}
               className={`rounded-md border px-3 py-1 text-xs ${
                 viewMode === m ? "border-primary bg-primary text-primary-foreground" : "hover:bg-secondary"
               }`}
@@ -140,19 +218,58 @@ export default function KampanjeChartPage() {
               {m === "daily" ? "Dnevno" : m === "weekly" ? "Nedeljno" : m === "monthly" ? "Mesečno" : m === "yearly" ? "Godišnje" : "Custom"}
             </button>
           ))}
-          {viewMode === "custom" && (
-            <span className="ml-2 flex items-center gap-1">
-              <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="rounded border px-2 py-0.5 text-xs" />
-              <span>—</span>
-              <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="rounded border px-2 py-0.5 text-xs" />
-            </span>
-          )}
         </div>
       </div>
 
-      <div className="text-xs text-muted-foreground">
-        {range.from.toLocaleDateString("sr-Latn")} — {range.to.toLocaleDateString("sr-Latn")}
-      </div>
+      {/* Navigacija (← anchor →) — za sve modove osim custom */}
+      {viewMode !== "custom" && (
+        <div className="flex items-center justify-between rounded-md border bg-card px-3 py-2">
+          <button
+            onClick={() => shift(-1)}
+            className="flex items-center gap-1 rounded-md border px-3 py-1 text-xs hover:bg-secondary"
+            title={`Prethodni ${viewMode === "daily" ? "dan" : viewMode === "weekly" ? "nedelja" : viewMode === "monthly" ? "mesec" : "godina"}`}
+          >
+            ← {viewMode === "daily" ? "Dan pre" : viewMode === "weekly" ? "Prethodna nedelja" : viewMode === "monthly" ? "Prethodni mesec" : "Prethodna godina"}
+          </button>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">{rangeLabel(viewMode, anchorDate, range)}</span>
+            <button onClick={resetToToday} className="rounded-md border px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-secondary" title="Vrati na danas">↺ Danas</button>
+          </div>
+          <button
+            onClick={() => shift(1)}
+            className="flex items-center gap-1 rounded-md border px-3 py-1 text-xs hover:bg-secondary"
+            title={`Sledeći ${viewMode === "daily" ? "dan" : viewMode === "weekly" ? "nedelja" : viewMode === "monthly" ? "mesec" : "godina"}`}
+          >
+            {viewMode === "daily" ? "Dan posle" : viewMode === "weekly" ? "Sledeća nedelja" : viewMode === "monthly" ? "Sledeći mesec" : "Sledeća godina"} →
+          </button>
+        </div>
+      )}
+
+      {/* Mesečni: sub-toggle granularnosti */}
+      {viewMode === "monthly" && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground">Prikaz:</span>
+          <button
+            onClick={() => setMonthlyGranul("days")}
+            className={`rounded-md border px-3 py-1 ${monthlyGranul === "days" ? "border-primary bg-primary text-primary-foreground" : "hover:bg-secondary"}`}
+          >Po danima</button>
+          <button
+            onClick={() => setMonthlyGranul("weeks")}
+            className={`rounded-md border px-3 py-1 ${monthlyGranul === "weeks" ? "border-primary bg-primary text-primary-foreground" : "hover:bg-secondary"}`}
+          >Po nedeljama</button>
+        </div>
+      )}
+
+      {/* Custom: date pickeri ispod */}
+      {viewMode === "custom" && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-card px-3 py-2 text-xs">
+          <span className="text-muted-foreground">Opseg:</span>
+          <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="rounded border px-2 py-1 text-xs" />
+          <span>—</span>
+          <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="rounded border px-2 py-1 text-xs" />
+          <span className="ml-3 text-muted-foreground">{rangeLabel(viewMode, anchorDate, range)}</span>
+        </div>
+      )}
 
       {isLoading && <p className="text-sm text-muted-foreground">Učitavam...</p>}
       {!isLoading && (!data || data.length === 0) && <p className="text-sm text-muted-foreground">Nema vozila u sistemu.</p>}
@@ -169,16 +286,21 @@ export default function KampanjeChartPage() {
             <span className="ml-auto italic">💡 Klikni i povuci preko O (gornji) ili I (donji) reda</span>
           </div>
 
-          {/* Header sa datumima */}
-          <div className="mb-2 flex items-center text-[10px] text-muted-foreground">
+          {/* Header sa datumima — tick labelovi po modu */}
+          <div className="mb-2 flex items-stretch text-[10px] text-muted-foreground">
             <div className="w-44 shrink-0 px-1">Vozilo / Garaža</div>
             <div className="w-6 shrink-0"></div>
-            <div className="flex-1 relative">
-              <div className="flex justify-between">
-                <span>{new Date(past).toLocaleDateString("sr-Latn")}</span>
-                {nowInRange && <span style={{ position: "absolute", left: `${nowOffset}%` }} className="font-semibold text-destructive">SADA</span>}
-                <span>{new Date(future).toLocaleDateString("sr-Latn")}</span>
-              </div>
+            <div className="flex-1 relative h-5">
+              {buildTicks(viewMode, monthlyGranul, range.from, range.to).map((t, i) => (
+                <span
+                  key={`tick-${i}`}
+                  style={{ position: "absolute", left: `${t.pct}%`, transform: "translateX(-50%)" }}
+                  className="whitespace-nowrap"
+                >
+                  {t.label}
+                </span>
+              ))}
+              {nowInRange && <span style={{ position: "absolute", left: `${nowOffset}%`, transform: "translateX(-50%)" }} className="font-semibold text-destructive">▼</span>}
             </div>
           </div>
 
