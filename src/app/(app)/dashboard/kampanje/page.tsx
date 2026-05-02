@@ -286,21 +286,26 @@ export default function KampanjeChartPage() {
             <span className="ml-auto italic">💡 Klikni i povuci preko O (gornji) ili I (donji) reda</span>
           </div>
 
-          {/* Header sa datumima — tick labelovi po modu */}
+          {/* Header sa datumima — tick labelovi po modu (▼ marker je ispod labela) */}
           <div className="mb-2 flex items-stretch text-[10px] text-muted-foreground">
             <div className="w-44 shrink-0 px-1">Vozilo / Garaža</div>
             <div className="w-6 shrink-0"></div>
-            <div className="flex-1 relative h-5">
+            <div className="flex-1 relative h-7">
               {buildTicks(viewMode, monthlyGranul, range.from, range.to).map((t, i) => (
                 <span
                   key={`tick-${i}`}
-                  style={{ position: "absolute", left: `${t.pct}%`, transform: "translateX(-50%)" }}
+                  style={{ position: "absolute", top: 0, left: `${t.pct}%`, transform: "translateX(-50%)" }}
                   className="whitespace-nowrap"
                 >
                   {t.label}
                 </span>
               ))}
-              {nowInRange && <span style={{ position: "absolute", left: `${nowOffset}%`, transform: "translateX(-50%)" }} className="font-semibold text-destructive">▼</span>}
+              {nowInRange && (
+                <span
+                  style={{ position: "absolute", bottom: 0, left: `${nowOffset}%`, transform: "translateX(-50%)" }}
+                  className="font-semibold text-destructive leading-none"
+                >▼</span>
+              )}
             </div>
           </div>
 
