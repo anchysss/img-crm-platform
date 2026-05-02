@@ -232,7 +232,6 @@ function KampanjaCreateDialog({ prefill, onClose }: { prefill: { pozicijaId?: st
     ponudaId: "",
     odDatum: prefill.odDatum ? isoDate(prefill.odDatum) : isoDate(new Date()),
     doDatum: prefill.doDatum ? isoDate(prefill.doDatum) : isoDate(addDays(new Date(), 14)),
-    cena: "",
     napomene: "",
   });
   const [err, setErr] = useState<string | null>(null);
@@ -271,11 +270,11 @@ function KampanjaCreateDialog({ prefill, onClose }: { prefill: { pozicijaId?: st
         doDatum: new Date(form.doDatum),
         valuta: tenant.valuta,
         napomene: form.napomene || undefined,
-        stavke: prefill.pozicijaId && form.cena ? [{
+        stavke: prefill.pozicijaId ? [{
           pozicijaId: prefill.pozicijaId,
           odDatum: new Date(form.odDatum),
           doDatum: new Date(form.doDatum),
-          cena: form.cena,
+          cena: "0", // cena se vodi u ponudi, ne u kampanji
         }] : undefined,
       } as any);
     } catch (e: any) { setErr(e.message); }
@@ -320,9 +319,9 @@ function KampanjaCreateDialog({ prefill, onClose }: { prefill: { pozicijaId?: st
           <Field label="Trajanje od *"><Input type="date" required value={form.odDatum} onChange={(e) => setForm({ ...form, odDatum: e.target.value })} /></Field>
           <Field label="Trajanje do *"><Input type="date" required value={form.doDatum} onChange={(e) => setForm({ ...form, doDatum: e.target.value })} /></Field>
           {prefill.pozicijaId && (
-            <Field label={`Cena za poziciju (${tenant.valuta}) *`}>
-              <Input required type="number" step="0.01" value={form.cena} onChange={(e) => setForm({ ...form, cena: e.target.value })} placeholder="Cena za period" />
-            </Field>
+            <div className="col-span-2 rounded-md border bg-secondary/20 p-2 text-[11px] text-muted-foreground">
+              💡 Cene se vode u ponudi (nivo stavke), ne u kampanji.
+            </div>
           )}
           <div className="col-span-2">
             <Field label="Napomene">

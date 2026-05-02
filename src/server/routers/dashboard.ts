@@ -134,6 +134,81 @@ export const dashboardRouter = router({
     });
   }),
 
+  // Chart po vozilu — svako vozilo ima 2 reda (outdoor + indoor) za naredni period
+  voziloKampanjeChart: withPermission("dashboard", "READ").query(async ({ ctx }) => {
+    const now = new Date();
+    const past30 = new Date(now.getTime() - 30 * 86400000);
+    const next90 = new Date(now.getTime() + 90 * 86400000);
+
+    const vozila = await prisma.vozilo.findMany({
+      where: { ...tenantWhere(ctx.session!), aktivan: true },
+      select: {
+        id: true,
+        sifra: true,
+        registracija: true,
+        model: true,
+        garaza: true,
+        tipVozilaTxt: true,
+        pozicije: {
+          select: {
+            id: true,
+            tip: true,
+            kampanjaStavke: {
+              where: {
+                kampanja: {
+                  deletedAt: null,
+                  odDatum: { lte: next90 },
+                  doDatum: { gte: past30 },
+                },
+              },
+              select: {
+                kampanjaId: true,
+                odDatum: true,
+                doDatum: true,
+                kampanja: {
+                  select: { id: true, naziv: true, status: true, partner: { select: { naziv: true } } },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ garaza: "asc" }, { sifra: "asc" }],
+      take: 100,
+    });
+
+    return vozila.map((v) => {
+      const outdoorKampanje: any[] = [];
+      const indoorKampanje: any[] = [];
+      for (const p of v.pozicije) {
+        for (const ks of p.kampanjaStavke) {
+          const target = p.tip === "UNUTRA" ? indoorKampanje : outdoorKampanje;
+          // Dedup po kampanjaId
+          if (!target.some((x) => x.id === ks.kampanjaId)) {
+            target.push({
+              id: ks.kampanjaId,
+              naziv: ks.kampanja.naziv,
+              status: ks.kampanja.status,
+              partner: ks.kampanja.partner.naziv,
+              odDatum: ks.odDatum,
+              doDatum: ks.doDatum,
+            });
+          }
+        }
+      }
+      return {
+        id: v.id,
+        sifra: v.sifra,
+        registracija: v.registracija,
+        model: v.model,
+        garaza: v.garaza,
+        tipVozila: v.tipVozilaTxt,
+        outdoor: outdoorKampanje,
+        indoor: indoorKampanje,
+      };
+    }).filter((v) => v.outdoor.length > 0 || v.indoor.length > 0);
+  }),
+
   // Aktivne + poslate ponude (DRAFT, POSLATA, PRIHVACENA)
   ponudeOverview: withPermission("dashboard", "READ").query(async ({ ctx }) => {
     const session = ctx.session!;

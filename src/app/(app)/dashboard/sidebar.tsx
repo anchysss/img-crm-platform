@@ -9,9 +9,10 @@ interface NavSection { title: string; items: NavItem[]; adminOnly?: boolean; }
 
 const SECTIONS: NavSection[] = [
   {
-    title: "",
+    title: "Dashboard",
     items: [
-      { href: "/dashboard", label: "📊  Dashboard" },
+      { href: "/dashboard", label: "🏠  Danas" },
+      { href: "/dashboard/kampanje", label: "🗓️  Kampanje" },
       { href: "/notifications", label: "🔔  Notifikacije" },
     ],
   },
@@ -29,7 +30,6 @@ const SECTIONS: NavSection[] = [
     title: "Logistika",
     items: [
       { href: "/logistika/radni-nalozi", label: "📋  Radni nalozi" },
-      { href: "/logistika/mediabook", label: "🗓️  Kampanje" },
       { href: "/logistika/vozila", label: "🚌  Vozila" },
       { href: "/logistika/sifarnici", label: "📚  Šifarnici" },
     ],

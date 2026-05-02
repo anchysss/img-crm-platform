@@ -71,7 +71,18 @@ export default function NovaPonudaPage() {
   function add() {
     setStavke((s) => [...s, { rb: s.length + 1, opis: "", grad: tenant.capital, brojVozila: 1, cena: "0", popustPct: "0" }]);
   }
-  function updateCell(i: number, patch: Partial<Stavka>) { setStavke((s) => s.map((x, idx) => (idx === i ? { ...x, ...patch } : x))); }
+  function updateCell(i: number, patch: Partial<Stavka>) {
+    setStavke((s) => s.map((x, idx) => {
+      if (idx !== i) return x;
+      const merged = { ...x, ...patch };
+      // Auto-fill cene iz cenovnika kad se promeni tipBrendinga
+      if (patch.tipBrendinga !== undefined && patch.tipBrendinga) {
+        const c = (cenovnik.data ?? []).find((c: any) => c.tipOglasa === patch.tipBrendinga && c.aktivan);
+        if (c) merged.cena = String(c.cena);
+      }
+      return merged;
+    }));
+  }
   function remove(i: number) { setStavke((s) => s.filter((_, idx) => idx !== i).map((x, idx) => ({ ...x, rb: idx + 1 }))); }
 
   function addFromPaket(paketId: string) {
@@ -196,7 +207,12 @@ export default function NovaPonudaPage() {
                       <td className="px-2 py-1"><Input value={s.opis} onChange={(e) => updateCell(i, { opis: e.target.value })} /></td>
                       <td className="px-2 py-1"><Input value={s.grad} onChange={(e) => updateCell(i, { grad: e.target.value })} /></td>
                       <td className="px-2 py-1"><Input type="number" value={s.brojVozila} onChange={(e) => updateCell(i, { brojVozila: Number(e.target.value) })} /></td>
-                      <td className="px-2 py-1"><Input type="number" step="0.01" value={s.cena} onChange={(e) => updateCell(i, { cena: e.target.value })} /></td>
+                      <td className="px-2 py-1">
+                        <Input type="number" step="0.01" value={s.cena} onChange={(e) => updateCell(i, { cena: e.target.value })} />
+                        {s.tipBrendinga && (cenovnik.data ?? []).some((c: any) => c.tipOglasa === s.tipBrendinga && c.aktivan) && (
+                          <div className="mt-0.5 text-[9px] text-emerald-700">📋 Iz cenovnika</div>
+                        )}
+                      </td>
                       <td className="px-2 py-1"><Input type="number" step="0.1" value={s.popustPct} onChange={(e) => updateCell(i, { popustPct: e.target.value })} /></td>
                       <td className="px-2 py-1.5 text-right font-medium">{formatCurrency(iznos, form.valuta)}</td>
                       <td className="px-2"><Button type="button" size="sm" variant="ghost" onClick={() => remove(i)}>×</Button></td>

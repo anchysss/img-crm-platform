@@ -9,7 +9,6 @@ import Link from "next/link";
 export default function DashboardPage() {
   const { data, isLoading } = trpc.dashboard.today.useQuery();
   const forecastAcc = trpc.dashboard.forecastAccuracy.useQuery();
-  const kampanje = trpc.dashboard.campaignsOverview.useQuery();
   const ponude = trpc.dashboard.ponudeOverview.useQuery();
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Učitavam...</p>;
@@ -17,12 +16,7 @@ export default function DashboardPage() {
 
   const k = data.kpi;
   return (
-    <div className="flex flex-col gap-8">
-      <section>
-        <h1 className="mb-3 text-2xl font-semibold">Dashboard</h1>
-        <CampaignsWidget items={kampanje.data ?? []} />
-      </section>
-
+    <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Danas</h1>
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
