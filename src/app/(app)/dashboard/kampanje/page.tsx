@@ -118,7 +118,6 @@ export default function KampanjeChartPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Header sa period selektorom */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold">Kampanje po vozilu</h1>
         <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -152,42 +151,144 @@ export default function KampanjeChartPage() {
       {!isLoading && (!data || data.length === 0) && <p className="text-sm text-muted-foreground">Nema vozila u sistemu.</p>}
 
       {!isLoading && data && data.length > 0 && (
-        <>
-          <ChartSection
-            title="OUTDOOR kampanje"
-            tone="outdoor"
-            vozila={data}
-            past={past}
-            future={future}
-            total={total}
-            nowOffset={nowOffset}
-            nowInRange={nowInRange}
-            drag={drag}
-            onMouseDown={startDrag}
-            onMouseMove={onMouseMove}
-            onMouseUp={endDrag}
-          />
+        <div className="rounded-md border bg-card p-4">
+          {/* Legenda */}
+          <div className="mb-3 flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
+            <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-blue-500" />Outdoor — Potvrđena</span>
+            <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-emerald-500" />Outdoor — U realizaciji</span>
+            <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-indigo-500" />Indoor — Potvrđena</span>
+            <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-cyan-500" />Indoor — U realizaciji</span>
+            <span className="flex items-center gap-1"><span className="inline-block h-3 w-0.5 bg-destructive" />Sada</span>
+            <span className="ml-auto italic">💡 Klikni i povuci preko O (gornji) ili I (donji) reda</span>
+          </div>
 
-          <ChartSection
-            title="INDOOR kampanje"
-            tone="indoor"
-            vozila={data}
-            past={past}
-            future={future}
-            total={total}
-            nowOffset={nowOffset}
-            nowInRange={nowInRange}
-            drag={drag}
-            onMouseDown={startDrag}
-            onMouseMove={onMouseMove}
-            onMouseUp={endDrag}
-          />
-        </>
+          {/* Header sa datumima */}
+          <div className="mb-2 flex items-center text-[10px] text-muted-foreground">
+            <div className="w-44 shrink-0 px-1">Vozilo / Garaža</div>
+            <div className="w-6 shrink-0"></div>
+            <div className="flex-1 relative">
+              <div className="flex justify-between">
+                <span>{new Date(past).toLocaleDateString("sr-Latn")}</span>
+                {nowInRange && <span style={{ position: "absolute", left: `${nowOffset}%` }} className="font-semibold text-destructive">SADA</span>}
+                <span>{new Date(future).toLocaleDateString("sr-Latn")}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Lista vozila — svaki vozilo ima 2 reda (Outdoor iznad, Indoor ispod) */}
+          <div className="flex flex-col gap-2">
+            {data.map((v: any) => {
+              const isDraggingThis = drag?.voziloId === v.id;
+              const dragA = Math.min(drag?.startPct ?? 0, drag?.endPct ?? 0);
+              const dragB = Math.max(drag?.startPct ?? 0, drag?.endPct ?? 0);
+
+              return (
+                <div key={v.id} className="flex items-stretch border-t pt-2">
+                  {/* Levo: vozilo info */}
+                  <div className="w-44 shrink-0 px-1 text-[11px]">
+                    <Link href={`/logistika/vozila/${v.id}`} className="font-mono font-semibold hover:underline">
+                      {v.sifra ?? v.registracija ?? "?"}
+                    </Link>
+                    <div className="truncate text-[10px] text-muted-foreground">{v.tipVozila ?? v.model ?? "—"}</div>
+                    {v.garaza && <div className="truncate text-[10px] text-muted-foreground">{v.garaza}</div>}
+                  </div>
+
+                  {/* O / I labele kolona */}
+                  <div className="flex w-6 shrink-0 flex-col gap-0.5">
+                    <div className="flex h-5 items-center justify-center rounded-l-sm bg-blue-50 text-[9px] font-bold text-blue-700">O</div>
+                    <div className="flex h-5 items-center justify-center rounded-l-sm bg-indigo-50 text-[9px] font-bold text-indigo-700">I</div>
+                  </div>
+
+                  {/* Desno: 2 reda (outdoor + indoor) */}
+                  <div className="flex flex-1 flex-col gap-0.5">
+                    {/* OUTDOOR red — blago plav background */}
+                    <div
+                      className={`relative h-5 rounded-r-sm bg-blue-50/60 select-none ${v.outdoorPozicijaId ? "cursor-crosshair hover:bg-blue-100/60" : "opacity-50"}`}
+                      onMouseDown={(e) => v.outdoorPozicijaId && startDrag(v.id, v.outdoorPozicijaId, "Outdoor", e)}
+                      onMouseMove={onMouseMove}
+                      onMouseUp={endDrag}
+                      onMouseLeave={() => isDraggingThis && drag?.tipLabel === "Outdoor" && endDrag()}
+                      title={v.outdoorPozicijaId ? "Klikni i povuci za novu Outdoor kampanju" : "Vozilo nema outdoor poziciju"}
+                    >
+                      {nowInRange && <div className="pointer-events-none absolute top-0 z-10 h-full w-px bg-destructive" style={{ left: `${nowOffset}%` }} />}
+                      {v.outdoor.length === 0 && !(isDraggingThis && drag?.tipLabel === "Outdoor") && (
+                        <span className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] italic text-muted-foreground">—</span>
+                      )}
+                      {v.outdoor.map((k: any) => {
+                        const odMs = new Date(k.odDatum).getTime();
+                        const doMs = new Date(k.doDatum).getTime();
+                        const start = Math.max(odMs, past);
+                        const end = Math.min(doMs, future);
+                        if (end < past || start > future) return null;
+                        const left = ((start - past) / total) * 100;
+                        const width = Math.max(0.5, ((end - start) / total) * 100);
+                        const cls = STATUS_BG_OUT[k.status] ?? "bg-blue-500";
+                        return (
+                          <Link
+                            key={`out-${k.id}`}
+                            href={`/logistika/kampanje/${k.id}`}
+                            className={`absolute top-0 flex h-full items-center rounded-sm px-1 text-[9px] font-semibold text-white hover:opacity-90 ${cls}`}
+                            style={{ left: `${left}%`, width: `${width}%` }}
+                            title={`OUTDOOR · ${k.naziv} · ${k.partner} · ${formatDate(k.odDatum)} → ${formatDate(k.doDatum)}`}
+                          >
+                            <span className="truncate">{k.naziv}</span>
+                          </Link>
+                        );
+                      })}
+                      {isDraggingThis && drag?.tipLabel === "Outdoor" && (
+                        <div className="pointer-events-none absolute top-0 h-full rounded-sm bg-blue-500/40 ring-2 ring-blue-500" style={{ left: `${dragA}%`, width: `${dragB - dragA}%` }} />
+                      )}
+                    </div>
+
+                    {/* INDOOR red — blago indigo background */}
+                    <div
+                      className={`relative h-5 rounded-r-sm bg-indigo-50/60 select-none ${v.indoorPozicijaId ? "cursor-crosshair hover:bg-indigo-100/60" : "opacity-50"}`}
+                      onMouseDown={(e) => v.indoorPozicijaId && startDrag(v.id, v.indoorPozicijaId, "Indoor", e)}
+                      onMouseMove={onMouseMove}
+                      onMouseUp={endDrag}
+                      onMouseLeave={() => isDraggingThis && drag?.tipLabel === "Indoor" && endDrag()}
+                      title={v.indoorPozicijaId ? "Klikni i povuci za novu Indoor kampanju" : "Vozilo nema indoor poziciju"}
+                    >
+                      {nowInRange && <div className="pointer-events-none absolute top-0 z-10 h-full w-px bg-destructive" style={{ left: `${nowOffset}%` }} />}
+                      {v.indoor.length === 0 && !(isDraggingThis && drag?.tipLabel === "Indoor") && (
+                        <span className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] italic text-muted-foreground">—</span>
+                      )}
+                      {v.indoor.map((k: any) => {
+                        const odMs = new Date(k.odDatum).getTime();
+                        const doMs = new Date(k.doDatum).getTime();
+                        const start = Math.max(odMs, past);
+                        const end = Math.min(doMs, future);
+                        if (end < past || start > future) return null;
+                        const left = ((start - past) / total) * 100;
+                        const width = Math.max(0.5, ((end - start) / total) * 100);
+                        const cls = STATUS_BG_IN[k.status] ?? "bg-indigo-500";
+                        return (
+                          <Link
+                            key={`in-${k.id}`}
+                            href={`/logistika/kampanje/${k.id}`}
+                            className={`absolute top-0 flex h-full items-center rounded-sm px-1 text-[9px] font-semibold text-white hover:opacity-90 ${cls}`}
+                            style={{ left: `${left}%`, width: `${width}%` }}
+                            title={`INDOOR · ${k.naziv} · ${k.partner} · ${formatDate(k.odDatum)} → ${formatDate(k.doDatum)}`}
+                          >
+                            <span className="truncate">{k.naziv}</span>
+                          </Link>
+                        );
+                      })}
+                      {isDraggingThis && drag?.tipLabel === "Indoor" && (
+                        <div className="pointer-events-none absolute top-0 h-full rounded-sm bg-indigo-500/40 ring-2 ring-indigo-500" style={{ left: `${dragA}%`, width: `${dragB - dragA}%` }} />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       <p className="text-[11px] text-muted-foreground">
-        💡 Klikni i povuci preko reda u OUTDOOR sekciji za novu outdoor kampanju, ili u INDOOR sekciji za indoor.
-        Klik na postojeću traku otvara kampanju.
+        💡 Svaki vozilo ima 2 reda — gornji (O) za Outdoor kampanje, donji (I) za Indoor.
+        Klikni i povuci preko praznog reda da kreiraš novu kampanju.
       </p>
 
       {dialogPrefill && (
@@ -199,137 +300,6 @@ export default function KampanjeChartPage() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-function ChartSection({
-  title,
-  tone,
-  vozila,
-  past,
-  future,
-  total,
-  nowOffset,
-  nowInRange,
-  drag,
-  onMouseDown,
-  onMouseMove,
-  onMouseUp,
-}: {
-  title: string;
-  tone: "outdoor" | "indoor";
-  vozila: any[];
-  past: number;
-  future: number;
-  total: number;
-  nowOffset: number;
-  nowInRange: boolean;
-  drag: DragState | null;
-  onMouseDown: (voziloId: string, pozicijaId: string, tipLabel: "Outdoor" | "Indoor", e: React.MouseEvent<HTMLDivElement>) => void;
-  onMouseMove: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onMouseUp: () => void;
-}) {
-  const isOutdoor = tone === "outdoor";
-  const tipLabel: "Outdoor" | "Indoor" = isOutdoor ? "Outdoor" : "Indoor";
-  // Blago osenčen background različit za outdoor vs indoor zonu
-  const sectionBg = isOutdoor ? "bg-blue-50/40" : "bg-indigo-50/40";
-  const sectionBorder = isOutdoor ? "border-blue-200" : "border-indigo-200";
-  const sectionHeaderBg = isOutdoor ? "bg-blue-100/70" : "bg-indigo-100/70";
-
-  return (
-    <div className={`rounded-md border ${sectionBorder} ${sectionBg} overflow-hidden`}>
-      <div className={`flex items-center justify-between border-b ${sectionBorder} ${sectionHeaderBg} px-4 py-2 text-xs font-bold uppercase tracking-wider`}>
-        <span>{title}</span>
-        <div className="flex items-center gap-3 text-[10px] font-normal normal-case text-muted-foreground">
-          {isOutdoor ? (
-            <>
-              <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-blue-500" />Potvrđena</span>
-              <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-emerald-500" />U realizaciji</span>
-            </>
-          ) : (
-            <>
-              <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-indigo-500" />Potvrđena</span>
-              <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-cyan-500" />U realizaciji</span>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-center px-4 pt-2 text-[10px] text-muted-foreground">
-        <div className="w-44 shrink-0">Vozilo / Garaža</div>
-        <div className="flex-1 relative">
-          <div className="flex justify-between">
-            <span>{new Date(past).toLocaleDateString("sr-Latn")}</span>
-            {nowInRange && <span style={{ position: "absolute", left: `${nowOffset}%` }} className="font-semibold text-destructive">SADA</span>}
-            <span>{new Date(future).toLocaleDateString("sr-Latn")}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-1.5 px-4 pb-3 pt-2">
-        {vozila.map((v: any) => {
-          const pozicijaId = isOutdoor ? v.outdoorPozicijaId : v.indoorPozicijaId;
-          const kampanje = isOutdoor ? v.outdoor : v.indoor;
-          const statusMap = isOutdoor ? STATUS_BG_OUT : STATUS_BG_IN;
-          const dragColor = isOutdoor ? "bg-blue-500/40 ring-blue-500" : "bg-indigo-500/40 ring-indigo-500";
-          const isDraggingThis = drag?.voziloId === v.id && drag?.tipLabel === tipLabel;
-          const dragA = Math.min(drag?.startPct ?? 0, drag?.endPct ?? 0);
-          const dragB = Math.max(drag?.startPct ?? 0, drag?.endPct ?? 0);
-
-          return (
-            <div key={v.id} className="flex items-center border-t border-white/60 pt-1.5">
-              <div className="w-44 shrink-0 px-1 text-[11px]">
-                <Link href={`/logistika/vozila/${v.id}`} className="font-mono font-semibold hover:underline">
-                  {v.sifra ?? v.registracija ?? "?"}
-                </Link>
-                <div className="truncate text-[10px] text-muted-foreground">{v.tipVozila ?? v.model ?? "—"}</div>
-                {v.garaza && <div className="truncate text-[10px] text-muted-foreground">{v.garaza}</div>}
-              </div>
-
-              <div
-                className={`relative h-5 flex-1 rounded-sm bg-white/80 select-none ${pozicijaId ? "cursor-crosshair hover:bg-white" : "opacity-50"}`}
-                onMouseDown={(e) => pozicijaId && onMouseDown(v.id, pozicijaId, tipLabel, e)}
-                onMouseMove={onMouseMove}
-                onMouseUp={onMouseUp}
-                onMouseLeave={() => isDraggingThis && onMouseUp()}
-                title={pozicijaId ? `Klikni i povuci za novu ${tipLabel} kampanju` : `Vozilo nema ${tipLabel.toLowerCase()} poziciju`}
-              >
-                {nowInRange && (
-                  <div className="pointer-events-none absolute top-0 z-10 h-full w-px bg-destructive" style={{ left: `${nowOffset}%` }} />
-                )}
-                {kampanje.length === 0 && !isDraggingThis && (
-                  <span className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] italic text-muted-foreground">—</span>
-                )}
-                {kampanje.map((k: any) => {
-                  const odMs = new Date(k.odDatum).getTime();
-                  const doMs = new Date(k.doDatum).getTime();
-                  const start = Math.max(odMs, past);
-                  const end = Math.min(doMs, future);
-                  if (end < past || start > future) return null;
-                  const left = ((start - past) / total) * 100;
-                  const width = Math.max(0.5, ((end - start) / total) * 100);
-                  const cls = statusMap[k.status] ?? (isOutdoor ? "bg-blue-500" : "bg-indigo-500");
-                  return (
-                    <Link
-                      key={`${tone}-${k.id}`}
-                      href={`/logistika/kampanje/${k.id}`}
-                      className={`absolute top-0 flex h-full items-center rounded-sm px-1 text-[9px] font-semibold text-white hover:opacity-90 ${cls}`}
-                      style={{ left: `${left}%`, width: `${width}%` }}
-                      title={`${tipLabel.toUpperCase()} · ${k.naziv} · ${k.partner} · ${formatDate(k.odDatum)} → ${formatDate(k.doDatum)}`}
-                    >
-                      <span className="truncate">{k.naziv}</span>
-                    </Link>
-                  );
-                })}
-                {isDraggingThis && (
-                  <div className={`pointer-events-none absolute top-0 h-full rounded-sm ring-2 ${dragColor}`} style={{ left: `${dragA}%`, width: `${dragB - dragA}%` }} />
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
