@@ -86,11 +86,11 @@ function buildTicks(mode: ViewMode, monthlyGranul: "weeks" | "days", from: Date,
     }
   } else if (mode === "monthly") {
     if (monthlyGranul === "days") {
+      // Svi dani u mesecu — kolone se obeležavaju brojem dana
       const dayCount = Math.round(total / 86400000);
-      const step = dayCount > 20 ? 5 : 1;
-      for (let i = 0; i <= dayCount; i += step) {
+      for (let i = 0; i <= dayCount; i++) {
         const t = new Date(from); t.setDate(t.getDate() + i);
-        ticks.push({ pct: pct(t), label: `${t.getDate()}.` });
+        ticks.push({ pct: pct(t), label: String(t.getDate()) });
       }
     } else {
       // Po nedeljama — start of each ISO week within range
