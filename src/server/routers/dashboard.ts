@@ -180,10 +180,13 @@ export const dashboardRouter = router({
     return vozila.map((v) => {
       const outdoorKampanje: any[] = [];
       const indoorKampanje: any[] = [];
+      // Prva outdoor (npr CELO_VOZILO) i prva indoor (UNUTRA) pozicija — koriste
+      // se za pre-fill kad korisnik klikne/drag-and-drop preko reda na chart-u
+      const outdoorPozicija = v.pozicije.find((p) => p.tip !== "UNUTRA") ?? null;
+      const indoorPozicija = v.pozicije.find((p) => p.tip === "UNUTRA") ?? null;
       for (const p of v.pozicije) {
         for (const ks of p.kampanjaStavke) {
           const target = p.tip === "UNUTRA" ? indoorKampanje : outdoorKampanje;
-          // Dedup po kampanjaId
           if (!target.some((x) => x.id === ks.kampanjaId)) {
             target.push({
               id: ks.kampanjaId,
@@ -205,6 +208,8 @@ export const dashboardRouter = router({
         tipVozila: v.tipVozilaTxt,
         outdoor: outdoorKampanje,
         indoor: indoorKampanje,
+        outdoorPozicijaId: outdoorPozicija?.id ?? null,
+        indoorPozicijaId: indoorPozicija?.id ?? null,
       };
     });
     // Pokazuje SVA aktivna vozila, bez filtera — prazna vozila imaju samo
