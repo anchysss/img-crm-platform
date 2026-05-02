@@ -61,6 +61,13 @@ export function Sidebar({ email, roles }: { email: string; roles: Array<{ rola: 
   const isAdmin = roles.some((r) => r.rola === "ADMIN");
   const visible = SECTIONS.filter((s) => !s.adminOnly || isAdmin);
 
+  // Aktivan link je onaj sa najdužim match-om — sprečava da se /dashboard
+  // aktivira kad smo na /dashboard/kampanje
+  const allHrefs = visible.flatMap((s) => s.items.map((i) => i.href));
+  const activeHref = allHrefs
+    .filter((h) => pathname === h || pathname.startsWith(h + "/"))
+    .sort((a, b) => b.length - a.length)[0] ?? null;
+
   return (
     <aside className="w-60 shrink-0 border-r bg-secondary/40 p-3">
       <div className="mb-4 px-2">
@@ -78,7 +85,7 @@ export function Sidebar({ email, roles }: { email: string; roles: Array<{ rola: 
             )}
             <div className="flex flex-col gap-0.5">
               {section.items.map((it) => {
-                const active = pathname === it.href || pathname.startsWith(it.href + "/");
+                const active = it.href === activeHref;
                 return (
                   <Link
                     key={it.href}

@@ -206,7 +206,9 @@ export const dashboardRouter = router({
         outdoor: outdoorKampanje,
         indoor: indoorKampanje,
       };
-    }).filter((v) => v.outdoor.length > 0 || v.indoor.length > 0);
+    });
+    // Pokazuje SVA aktivna vozila, bez filtera — prazna vozila imaju samo
+    // placeholder "O · —" / "I · —" trake kao indikator slobodnog termina.
   }),
 
   // Aktivne + poslate ponude (DRAFT, POSLATA, PRIHVACENA)
