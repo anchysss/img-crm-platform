@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { router, withPermission } from "../trpc";
 import { prisma } from "@/lib/prisma";
 import { tenantWhere } from "../tenant";
@@ -134,11 +135,16 @@ export const dashboardRouter = router({
     });
   }),
 
-  // Chart po vozilu — svako vozilo ima 2 reda (outdoor + indoor) za naredni period
-  voziloKampanjeChart: withPermission("dashboard", "READ").query(async ({ ctx }) => {
+  // Chart po vozilu — sva vozila su prikazana u 2 sekcije: Outdoor + Indoor
+  voziloKampanjeChart: withPermission("dashboard", "READ").input(
+    z.object({
+      from: z.coerce.date().optional(),
+      to: z.coerce.date().optional(),
+    }).optional(),
+  ).query(async ({ ctx, input }) => {
     const now = new Date();
-    const past30 = new Date(now.getTime() - 30 * 86400000);
-    const next90 = new Date(now.getTime() + 90 * 86400000);
+    const past30 = input?.from ?? new Date(now.getTime() - 30 * 86400000);
+    const next90 = input?.to ?? new Date(now.getTime() + 90 * 86400000);
 
     const vozila = await prisma.vozilo.findMany({
       where: { ...tenantWhere(ctx.session!), aktivan: true },
