@@ -19,7 +19,7 @@ const STATUS_TONE: Record<string, any> = {
 export default function NalogMontazuDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { data, isLoading, refetch } = trpc.nalogMontazu.byId.useQuery({ id });
+  const { data, isLoading, error, refetch } = trpc.nalogMontazu.byId.useQuery({ id });
   const montazeri = trpc.logistikaLookups.montazeri.list.useQuery();
   const masine = trpc.logistikaLookups.masine.list.useQuery();
 
@@ -38,7 +38,13 @@ export default function NalogMontazuDetail() {
   const [montaza, setMontaza] = useState<number | "">("");
   const [rnSt, setRnSt] = useState("");
 
-  if (isLoading) return <p>Učitavam...</p>;
+  if (isLoading) return <p className="text-sm text-muted-foreground">Učitavam...</p>;
+  if (error) return (
+    <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4">
+      <p className="font-semibold text-destructive">Greška: {error.message}</p>
+      <p className="mt-1 text-xs text-muted-foreground">Ako je &quot;Tenant mismatch&quot;, nalog pripada drugom pravnom licu.</p>
+    </div>
+  );
   if (!data) return <p>Nalog ne postoji.</p>;
 
   const radniNalog: any = data.radniNalog;
