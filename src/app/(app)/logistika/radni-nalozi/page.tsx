@@ -260,6 +260,23 @@ function NalogStampuCreateDialog({ onClose }: { onClose: () => void }) {
   });
   const [err, setErr] = useState<string | null>(null);
 
+  // Auto-populate iz RN-a kad se izabere
+  const rnDetail = trpc.radniNalozi.byId.useQuery(
+    { id: form.radniNalogId },
+    { enabled: Boolean(form.radniNalogId) },
+  );
+  // Kad fetch RN-a stigne, popuni kampanjaNaziv ako nije setovan
+  if (rnDetail.data && form.radniNalogId === rnDetail.data.id && !form.kampanjaNaziv) {
+    const rn: any = rnDetail.data;
+    const partnerNaziv = rn.partner?.naziv ?? "";
+    const period = rn.odDatum ? new Date(rn.odDatum).toLocaleDateString("sr-Latn") : "";
+    setTimeout(() => setForm((f) => ({
+      ...f,
+      kampanjaNaziv: partnerNaziv ? `${partnerNaziv} — ${rn.broj}` : f.kampanjaNaziv,
+      napomena: f.napomena || (period ? `RN ${rn.broj} · ${partnerNaziv} · od ${period}` : ""),
+    })), 0);
+  }
+
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
@@ -346,6 +363,22 @@ function NalogMontazuCreateDialog({ onClose }: { onClose: () => void }) {
     napomena: "",
   });
   const [err, setErr] = useState<string | null>(null);
+
+  // Auto-populate iz RN-a (klijent + period u napomeni, grad iz RN.grad)
+  const rnDetail = trpc.radniNalozi.byId.useQuery(
+    { id: form.radniNalogId },
+    { enabled: Boolean(form.radniNalogId) },
+  );
+  if (rnDetail.data && form.radniNalogId === rnDetail.data.id && !form.napomena) {
+    const rn: any = rnDetail.data;
+    const partnerNaziv = rn.partner?.naziv ?? "";
+    const period = rn.odDatum ? `${new Date(rn.odDatum).toLocaleDateString("sr-Latn")} — ${new Date(rn.doDatum).toLocaleDateString("sr-Latn")}` : "";
+    setTimeout(() => setForm((f) => ({
+      ...f,
+      grad: f.grad || rn.grad || "",
+      napomena: f.napomena || (partnerNaziv ? `RN ${rn.broj} · ${partnerNaziv} · ${period}` : ""),
+    })), 0);
+  }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();

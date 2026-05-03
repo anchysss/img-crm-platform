@@ -13,6 +13,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { href: "/dashboard", label: "🏠  Danas" },
       { href: "/dashboard/kampanje", label: "🗓️  Kampanje" },
+      { href: "/dashboard/mediji", label: "🎬  Mediji" },
       { href: "/notifications", label: "🔔  Notifikacije" },
     ],
   },

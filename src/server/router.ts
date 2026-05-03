@@ -28,6 +28,7 @@ import { nalogStampuRouter } from "./routers/nalog-stampu";
 import { fotoAlbumRouter } from "./routers/foto-album";
 import { postbrendingRouter } from "./routers/postbrending";
 import { logistikaLookupsRouter } from "./routers/logistika-lookups";
+import { medijiKampanjeRouter } from "./routers/mediji-kampanje";
 
 export const appRouter = router({
   partners: partnersRouter,
@@ -59,6 +60,7 @@ export const appRouter = router({
   fotoAlbum: fotoAlbumRouter,
   postbrending: postbrendingRouter,
   logistikaLookups: logistikaLookupsRouter,
+  medijiKampanje: medijiKampanjeRouter,
 });
 
 export type AppRouter = typeof appRouter;

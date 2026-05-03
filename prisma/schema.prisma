@@ -572,10 +572,31 @@ model Kampanja {
   stavke      KampanjaStavka[]
   rezervacije Rezervacija[]
   dokumenti   Dokument[]
+  mediji      MedijKampanje[]
 
   @@index([pravnoLiceId, status])
   @@index([partnerId])
   @@index([ponudaId])
+}
+
+// Mediji (linkovi za pripremu/fajlove) po kampanji — sa flag-om za probnu štampu
+model MedijKampanje {
+  id           String   @id @default(cuid())
+  pravnoLiceId String
+  kampanjaId   String
+  url          String
+  naziv        String?
+  probnaStampa Boolean  @default(false)
+  redniBr      Int      @default(0)
+  napomena     String?
+  dodaoId      String? // korisnikId koji je dodao
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  kampanja Kampanja @relation(fields: [kampanjaId], references: [id], onDelete: Cascade)
+
+  @@index([pravnoLiceId])
+  @@index([kampanjaId])
 }
 
 enum KampanjaStatus {
@@ -776,6 +797,7 @@ enum NotifikacijaTip {
   PROBA_KOREKCIJA
   STAMPA_GOTOVA
   MONTAZA_ZAVRSENA
+  MEDIJI_DODATI // novi mediji uneti za kampanju
 }
 
 model AuditLog {
