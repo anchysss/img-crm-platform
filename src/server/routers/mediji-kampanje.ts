@@ -13,7 +13,7 @@ export const medijiKampanjeRouter = router({
       where: { ...tenantWhere(ctx.session!), deletedAt: null },
       include: {
         partner: { select: { id: true, naziv: true } },
-        _count: { select: { mediji: true } },
+        mediji: { select: { id: true, probnaStampa: true } },
       },
       orderBy: { odDatum: "desc" },
       take: 200,
@@ -25,7 +25,8 @@ export const medijiKampanjeRouter = router({
       partner: x.partner.naziv,
       odDatum: x.odDatum,
       doDatum: x.doDatum,
-      brojMedija: x._count.mediji,
+      brojMedija: x.mediji.length,
+      brojProbnih: x.mediji.filter((m) => m.probnaStampa).length,
     }));
   }),
 
