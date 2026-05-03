@@ -28,6 +28,8 @@ export default function NalogStampuDetail() {
   const removeStavka = trpc.nalogStampu.removeStavka.useMutation({ onSuccess: () => refetch() });
   const setStatus = trpc.nalogStampu.setStatus.useMutation({ onSuccess: () => refetch() });
   const update = trpc.nalogStampu.update.useMutation({ onSuccess: () => refetch() });
+  const vratiNaKorekciju = trpc.nalogStampu.vratiNaKorekciju.useMutation({ onSuccess: () => refetch() });
+  const odobriKorekciju = trpc.nalogStampu.odobriKorekciju.useMutation({ onSuccess: () => refetch() });
   const remove = trpc.nalogStampu.remove.useMutation({ onSuccess: () => router.push(`/logistika/radni-nalozi/${data?.radniNalogId}`) });
 
   // form state for new stavka (HIGER kolone)
@@ -60,9 +62,24 @@ export default function NalogStampuDetail() {
           <Button size="sm" variant="outline" onClick={() => window.print()}>🖨️ Štampaj</Button>
           {data.status === "NACRT" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "POSLATO" })}>Pošalji štampariji</Button>}
           {data.status === "POSLATO" && <Button size="sm" onClick={() => setStatus.mutate({ id, status: "POSTAVLJENO" })}>Završeno</Button>}
+          {data.status !== "PROBLEM" && (
+            <Button size="sm" variant="outline" onClick={() => {
+              const razlog = prompt("Razlog popravke (biće poslat štampariji):");
+              if (razlog && razlog.trim()) vratiNaKorekciju.mutate({ id, razlog: razlog.trim() });
+            }}>↩ Popravi</Button>
+          )}
+          {data.status === "PROBLEM" && (
+            <Button size="sm" onClick={() => odobriKorekciju.mutate({ id })}>✓ Odobri popravku</Button>
+          )}
           <Button size="sm" variant="outline" onClick={() => { if (confirm("Obriši nalog?")) remove.mutate({ id }); }}>Obriši</Button>
         </div>
       </div>
+
+      {(data as any).korekcijaNapomena && data.status === "PROBLEM" && (
+        <div className="no-print rounded-md border-2 border-amber-300 bg-amber-50 p-3 text-sm">
+          <strong className="text-amber-900">⚠️ Popravka u toku:</strong> {(data as any).korekcijaNapomena}
+        </div>
+      )}
 
       {/* Header edit panel (no-print) */}
       <div className="no-print rounded-md border bg-white p-3">

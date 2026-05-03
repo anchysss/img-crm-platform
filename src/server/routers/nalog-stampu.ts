@@ -5,6 +5,7 @@ import { tenantWhere, ensureTenant } from "../tenant";
 import { audit } from "../audit";
 import { AppError } from "../errors";
 import { StamparijaTip, MaterijalTip, NalogStavkaStatus, TipStampe } from "@prisma/client";
+import { notifyKorekcijaNalogStampu, notifyKorekcijaOdobrena } from "../services/notify-korekcija";
 
 const stavkaInput = z.object({
   redniBr: z.coerce.number().int().optional(),
@@ -182,5 +183,38 @@ export const nalogStampuRouter = router({
       },
       orderBy: [{ stamparija: "asc" }, { format: "asc" }],
     });
+  }),
+
+  // Korekcija (popravka) — postavi status na PROBLEM + zapiše razlog + email štampariji
+  vratiNaKorekciju: withPermission("campaigns", "UPDATE").input(
+    z.object({ id: z.string().cuid(), razlog: z.string().min(1) }),
+  ).mutation(async ({ ctx, input }) => {
+    const n = await prisma.nalogStampu.findUnique({ where: { id: input.id } });
+    if (!n) throw new AppError("NOT_FOUND", "Nalog ne postoji");
+    ensureTenant(ctx.session!, n.pravnoLiceId);
+    await prisma.nalogStampu.update({
+      where: { id: input.id },
+      data: { status: "PROBLEM", korekcijaNapomena: input.razlog },
+    });
+    await audit({ ctx: ctx.session, entitet: "NalogStampu", entitetId: input.id, akcija: "UPDATE", diff: { korekcija: input.razlog } });
+    try {
+      await notifyKorekcijaNalogStampu(input.id, input.razlog);
+    } catch (e) { console.error("notifyKorekcija failed", e); }
+    return { ok: true };
+  }),
+
+  odobriKorekciju: withPermission("campaigns", "UPDATE").input(
+    z.object({ id: z.string().cuid() }),
+  ).mutation(async ({ ctx, input }) => {
+    const n = await prisma.nalogStampu.findUnique({ where: { id: input.id } });
+    if (!n) throw new AppError("NOT_FOUND", "Nalog ne postoji");
+    ensureTenant(ctx.session!, n.pravnoLiceId);
+    await prisma.nalogStampu.update({
+      where: { id: input.id },
+      data: { status: "POSLATO", korekcijaNapomena: null },
+    });
+    await audit({ ctx: ctx.session, entitet: "NalogStampu", entitetId: input.id, akcija: "UPDATE", diff: { korekcija: "ODOBRENA" } });
+    try { await notifyKorekcijaOdobrena("STAMPA", input.id); } catch (e) { console.error(e); }
+    return { ok: true };
   }),
 });

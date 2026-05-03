@@ -333,4 +333,73 @@ export const vehiclesRouter = router({
     });
     return { ok: true, created, skipped, errors };
   }),
+
+  // Pronađi alternative za vozilo: isti tip + bar 1 zajednička linija + isti
+  // proizvođač (model startsWith match na prvoj reči), aktivno, bez konflikta
+  // u traženom periodu
+  findAlternatives: withPermission("vehicles", "READ").input(
+    z.object({
+      voziloId: z.string().cuid(),
+      odDatum: z.coerce.date(),
+      doDatum: z.coerce.date(),
+    }),
+  ).query(async ({ ctx, input }) => {
+    const v = await prisma.vozilo.findUnique({ where: { id: input.voziloId } });
+    if (!v) return [];
+    ensureTenant(ctx.session!, v.pravnoLiceId);
+
+    // Heuristika za "proizvođač" — prva reč modela (npr "Mercedes Citaro" → "Mercedes")
+    const proizvodjac = v.model?.split(/\s+/)[0]?.toLowerCase() ?? null;
+
+    const kandidati = await prisma.vozilo.findMany({
+      where: {
+        pravnoLiceId: v.pravnoLiceId,
+        deletedAt: null,
+        aktivan: true,
+        status: "AKTIVNO",
+        tip: v.tip, // isti tip (BUS/BUS_ZGLOBNI/TRAMVAJ/...)
+        id: { not: v.id },
+      },
+      include: {
+        pozicije: {
+          include: {
+            rezervacije: {
+              where: {
+                status: { in: ["CONFIRMED", "RUNNING", "HOLD"] },
+                odDatum: { lte: input.doDatum },
+                doDatum: { gte: input.odDatum },
+              },
+            },
+          },
+        },
+      },
+      take: 50,
+    });
+
+    return kandidati
+      .map((k) => {
+        const slobodno = k.pozicije.every((p) => p.rezervacije.length === 0);
+        const proizvodjacMatch = proizvodjac
+          ? (k.model?.toLowerCase().startsWith(proizvodjac) ?? false)
+          : false;
+        const linijeMatch = v.linija.length > 0 && k.linija.some((l) => v.linija.includes(l));
+        const score = (slobodno ? 100 : 0) + (proizvodjacMatch ? 30 : 0) + (linijeMatch ? 20 : 0);
+        return {
+          id: k.id,
+          sifra: k.sifra,
+          registracija: k.registracija,
+          model: k.model,
+          tipVozilaTxt: k.tipVozilaTxt,
+          tip: k.tip,
+          garaza: k.garaza,
+          linija: k.linija,
+          slobodno,
+          proizvodjacMatch,
+          linijeMatch,
+          score,
+        };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 20);
+  }),
 });

@@ -798,6 +798,9 @@ enum NotifikacijaTip {
   STAMPA_GOTOVA
   MONTAZA_ZAVRSENA
   MEDIJI_DODATI // novi mediji uneti za kampanju
+  NALOG_KOREKCIJA // popravka traženo na nalogu
+  NALOG_KOREKCIJA_ODOBRENA
+  VOZILO_NEDOSTUPNO_KAMPANJA // vozilo postalo nedostupno, ima aktivnu kampanju
 }
 
 model AuditLog {
@@ -1105,22 +1108,23 @@ model Resenje {
 
 // Nalog za Montažu — Beograd ili Gradovi
 model NalogMontazu {
-  id             String            @id @default(cuid())
-  pravnoLiceId   String
-  radniNalogId   String
-  broj           String // 317-TELENOR-MONTAZA-BG ili "125-2026"
-  tip            NalogMontazuTip
-  grad           String? // za GRADOVI: konkretan grad
-  ekipa          String? // legacy free-text (zadržano kompatibilnosti radi)
-  montazerId     String? // FK ka Montazer (BUS BRANDING…)
-  prevoznikNaziv String? // "Niš ekspres" — slobodno polje
-  masinaId       String? // FK ka Masina (LATEX…)
-  datumMontaze   DateTime?
-  vremeMontaze   String? // "08:00", "od 06h"
-  status         NalogStavkaStatus @default(NACRT)
-  napomena       String?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  id                String            @id @default(cuid())
+  pravnoLiceId      String
+  radniNalogId      String
+  broj              String // 317-TELENOR-MONTAZA-BG ili "125-2026"
+  tip               NalogMontazuTip
+  grad              String? // za GRADOVI: konkretan grad
+  ekipa             String? // legacy free-text (zadržano kompatibilnosti radi)
+  montazerId        String? // FK ka Montazer (BUS BRANDING…)
+  prevoznikNaziv    String? // "Niš ekspres" — slobodno polje
+  masinaId          String? // FK ka Masina (LATEX…)
+  datumMontaze      DateTime?
+  vremeMontaze      String? // "08:00", "od 06h"
+  status            NalogStavkaStatus @default(NACRT)
+  korekcijaNapomena String? // razlog popravke
+  napomena          String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   radniNalog  RadniNalog           @relation(fields: [radniNalogId], references: [id], onDelete: Cascade)
   montazerRef Montazer?            @relation(fields: [montazerId], references: [id])
@@ -1182,23 +1186,25 @@ model NalogMontazuStavka {
 
 // Nalog za Štampu — DPC Beograd ili Niš/druge štamparije
 model NalogStampu {
-  id            String            @id @default(cuid())
-  pravnoLiceId  String
-  radniNalogId  String
-  broj          String
-  kampanjaNaziv String? // "FAIRY HIGER - 2 kom"
-  stamparija    StamparijaTip
-  tipStampe     TipStampe         @default(REDOVNA) // PROBNA / REDOVNA
-  datumPredaje  DateTime
-  rokIzrade     DateTime
-  rokIzradeTime String? // "DO 14H"
-  masinaId      String? // FK ka Masina (LATEX, HP, XEIKON…)
-  masina        String? // legacy fallback string
-  rnStamparije  String? // broj radnog naloga koji vrati štamparija
-  status        NalogStavkaStatus @default(NACRT)
-  napomena      String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  id                String            @id @default(cuid())
+  pravnoLiceId      String
+  radniNalogId      String
+  broj              String
+  kampanjaNaziv     String? // "FAIRY HIGER - 2 kom"
+  stamparija        StamparijaTip
+  stamparijaEmail   String? // za slanje korekcije/naloga emailom
+  tipStampe         TipStampe         @default(REDOVNA) // PROBNA / REDOVNA
+  datumPredaje      DateTime
+  rokIzrade         DateTime
+  rokIzradeTime     String? // "DO 14H"
+  masinaId          String? // FK ka Masina (LATEX, HP, XEIKON…)
+  masina            String? // legacy fallback string
+  rnStamparije      String? // broj radnog naloga koji vrati štamparija
+  status            NalogStavkaStatus @default(NACRT)
+  korekcijaNapomena String? // razlog popravke
+  napomena          String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   radniNalog RadniNalog          @relation(fields: [radniNalogId], references: [id], onDelete: Cascade)
   masinaRef  Masina?             @relation(fields: [masinaId], references: [id])

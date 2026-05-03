@@ -6,6 +6,7 @@ import { audit } from "../audit";
 import { AppError } from "../errors";
 import { RadniNalogStatus, PripremaStatus } from "@prisma/client";
 import { notifyRnStatusChange, notifyPripremaChange } from "../services/notify-workflow";
+import { notifyKorekcijaRadniNalog, notifyKorekcijaOdobrena } from "../services/notify-korekcija";
 
 export const radniNaloziRouter = router({
   list: withPermission("campaigns", "READ").input(
@@ -186,9 +187,25 @@ export const radniNaloziRouter = router({
         { pravnoLiceId: rn.pravnoLiceId, radniNalogId: rn.id, broj: rn.broj, vlasnikProdajaId: rn.vlasnikProdajaId, partnerNaziv: partner?.naziv },
         "KOREKCIJA",
       );
+      await notifyKorekcijaRadniNalog(rn.id, input.razlog);
     } catch (e) {
       console.error("notify failed", e);
     }
+    return { ok: true };
+  }),
+
+  odobriKorekciju: withPermission("campaigns", "UPDATE").input(
+    z.object({ id: z.string().cuid() }),
+  ).mutation(async ({ ctx, input }) => {
+    const rn = await prisma.radniNalog.findUnique({ where: { id: input.id } });
+    if (!rn) throw new AppError("NOT_FOUND", "Radni nalog ne postoji");
+    ensureTenant(ctx.session!, rn.pravnoLiceId);
+    await prisma.radniNalog.update({
+      where: { id: input.id },
+      data: { pripremaStatus: "ODOBRENA", korekcijaNapomena: null },
+    });
+    await audit({ ctx: ctx.session, entitet: "RadniNalog", entitetId: input.id, akcija: "UPDATE", diff: { korekcija: "ODOBRENA" } });
+    try { await notifyKorekcijaOdobrena("RN", input.id); } catch (e) { console.error(e); }
     return { ok: true };
   }),
 });
