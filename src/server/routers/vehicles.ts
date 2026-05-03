@@ -185,7 +185,94 @@ export const vehiclesRouter = router({
     ensureTenant(ctx.session!, existing.pravnoLiceId);
     const updated = await prisma.vozilo.update({ where: { id: input.id }, data: { status: input.status } });
     await audit({ ctx: ctx.session, entitet: "Vozilo", entitetId: input.id, akcija: "UPDATE", diff: { status: input.status } });
+
+    // Side-effect: kad vozilo postaje nedostupno, notifikuj logistiku + agente prodaje
+    const NEDOSTUPNI = ["KVAR", "SERVIS", "NA_FARBANJU", "POVUCENO", "SIHTA"];
+    if (NEDOSTUPNI.includes(input.status) && !NEDOSTUPNI.includes(existing.status)) {
+      try {
+        const { notifyVoziloNedostupno } = await import("../services/notify-vozilo");
+        await notifyVoziloNedostupno(input.id, input.status);
+      } catch (e) {
+        console.error("notifyVoziloNedostupno failed", e);
+      }
+    }
     return updated;
+  }),
+
+  // Lista pogođenih kampanja za dato vozilo
+  pogodjeneKampanje: withPermission("vehicles", "READ").input(
+    z.object({ voziloId: z.string().cuid() }),
+  ).query(async ({ ctx, input }) => {
+    const v = await prisma.vozilo.findUnique({ where: { id: input.voziloId } });
+    if (!v) return [];
+    ensureTenant(ctx.session!, v.pravnoLiceId);
+    const { findKampanjeZaVozilo } = await import("../services/notify-vozilo");
+    return findKampanjeZaVozilo(input.voziloId);
+  }),
+
+  // Zameni vozilo u konkretnoj KampanjaStavki — premešta poziciju + rezervaciju
+  zameniUKampanji: withPermission("campaigns", "UPDATE").input(
+    z.object({
+      kampanjaStavkaId: z.string().cuid(),
+      novaPozicijaId: z.string().cuid(),
+    }),
+  ).mutation(async ({ ctx, input }) => {
+    const stavka = await prisma.kampanjaStavka.findUnique({
+      where: { id: input.kampanjaStavkaId },
+      include: { kampanja: { include: { partner: true, opportunity: { select: { vlasnikId: true } } } }, pozicija: true },
+    });
+    if (!stavka) throw new AppError("NOT_FOUND", "Stavka ne postoji");
+    ensureTenant(ctx.session!, stavka.kampanja.pravnoLiceId);
+
+    const novaPoz = await prisma.pozicija.findUnique({ where: { id: input.novaPozicijaId }, include: { vozilo: true } });
+    if (!novaPoz) throw new AppError("NOT_FOUND", "Nova pozicija ne postoji");
+    ensureTenant(ctx.session!, novaPoz.vozilo.pravnoLiceId);
+
+    // Update stavku + cancel staru rezervaciju + create novu
+    const staraPozicijaId = stavka.pozicijaId;
+    await prisma.$transaction([
+      prisma.kampanjaStavka.update({ where: { id: stavka.id }, data: { pozicijaId: input.novaPozicijaId } }),
+      prisma.rezervacija.updateMany({
+        where: {
+          kampanjaId: stavka.kampanjaId,
+          pozicijaId: staraPozicijaId,
+          status: { in: ["CONFIRMED", "RUNNING", "HOLD"] },
+        },
+        data: { status: "CANCELLED" },
+      }),
+      prisma.rezervacija.create({
+        data: {
+          pozicijaId: input.novaPozicijaId,
+          kampanjaId: stavka.kampanjaId,
+          status: "CONFIRMED",
+          odDatum: stavka.odDatum,
+          doDatum: stavka.doDatum,
+        },
+      }),
+    ]);
+    await audit({
+      ctx: ctx.session,
+      entitet: "KampanjaStavka",
+      entitetId: stavka.id,
+      akcija: "UPDATE",
+      diff: { staraPozicijaId, novaPozicijaId: input.novaPozicijaId },
+    });
+
+    // Notifikuj agenta prodaje
+    const vlasnikId = stavka.kampanja.opportunity?.vlasnikId;
+    if (vlasnikId) {
+      const { notify } = await import("../services/notify");
+      try {
+        await notify({
+          pravnoLiceId: stavka.kampanja.pravnoLiceId,
+          korisnikId: vlasnikId,
+          tip: "VOZILO_NEDOSTUPNO_KAMPANJA" as any,
+          poruka: `Vozilo zamenjeno u kampanji "${stavka.kampanja.naziv}" (${stavka.kampanja.partner.naziv}) — novo vozilo: ${novaPoz.vozilo.sifra ?? novaPoz.vozilo.registracija}.`,
+          linkUrl: `/logistika/kampanje/${stavka.kampanjaId}`,
+        });
+      } catch (e) { console.error(e); }
+    }
+    return { ok: true };
   }),
 
   addPosition: withPermission("positions", "CREATE").input(

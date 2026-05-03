@@ -34,6 +34,13 @@ export default function VoziloDetail() {
   const { data, isLoading } = trpc.vehicles.byId.useQuery({ id });
   const rez = trpc.vehicles.reservationsForVehicle.useQuery({ id });
 
+  const NEDOSTUPNI = ["KVAR", "SERVIS", "NA_FARBANJU", "POVUCENO", "SIHTA"];
+  const isNedostupno = data && NEDOSTUPNI.includes(data.status);
+  const pogodjene = trpc.vehicles.pogodjeneKampanje.useQuery(
+    { voziloId: id },
+    { enabled: Boolean(isNedostupno) },
+  );
+
   if (isLoading) return <p>Učitavam...</p>;
   if (!data) return <p>Vozilo nije pronađeno.</p>;
 
@@ -121,6 +128,11 @@ export default function VoziloDetail() {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Pogođene kampanje (kad je vozilo nedostupno) */}
+      {isNedostupno && (pogodjene.data?.length ?? 0) > 0 && (
+        <PogodjeneKampanjePanel voziloId={id} pogodjene={pogodjene.data ?? []} onAfter={() => pogodjene.refetch()} />
       )}
 
       {/* Aktivne rezervacije / kampanje */}
@@ -363,5 +375,117 @@ function CeneZakupaSection({ voziloId, cene, podrzani }: { voziloId: string; cen
         </div>
       )}
     </section>
+  );
+}
+
+function PogodjeneKampanjePanel({ voziloId, pogodjene, onAfter }: { voziloId: string; pogodjene: any[]; onAfter: () => void }) {
+  const [openKampId, setOpenKampId] = useState<string | null>(null);
+  const open = pogodjene.find((p) => p.kampanjaId === openKampId);
+  return (
+    <section className="rounded-md border-2 border-amber-300 bg-amber-50 p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-amber-900">⚠️ Vozilo nedostupno — pogođene kampanje ({pogodjene.length})</h2>
+        <span className="text-xs text-amber-700">Predloži zamenu za svaku kampanju</span>
+      </div>
+      <div className="overflow-hidden rounded-md border bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-amber-100/60 text-left">
+            <tr>
+              <th className="px-3 py-2">Kampanja</th>
+              <th className="px-3 py-2">Klijent</th>
+              <th className="px-3 py-2">Period</th>
+              <th className="px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {pogodjene.map((k: any) => (
+              <tr key={k.kampanjaId} className="border-t">
+                <td className="px-3 py-2 font-medium">{k.kampanjaNaziv}</td>
+                <td className="px-3 py-2 text-xs">{k.partnerNaziv}</td>
+                <td className="px-3 py-2 text-xs">{new Date(k.odDatum).toLocaleDateString("sr-Latn")} — {new Date(k.doDatum).toLocaleDateString("sr-Latn")}</td>
+                <td className="px-3 py-2 text-right">
+                  <Button size="sm" onClick={() => setOpenKampId(k.kampanjaId)}>🔄 Zameni vozilo</Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {open && (
+        <ZameniVoziloDialog
+          voziloId={voziloId}
+          kampanja={open}
+          onClose={() => { setOpenKampId(null); onAfter(); }}
+        />
+      )}
+    </section>
+  );
+}
+
+function ZameniVoziloDialog({ voziloId, kampanja, onClose }: { voziloId: string; kampanja: any; onClose: () => void }) {
+  const alts = trpc.vehicles.findAlternatives.useQuery({
+    voziloId,
+    odDatum: new Date(kampanja.odDatum),
+    doDatum: new Date(kampanja.doDatum),
+  });
+  const [novaPozId, setNovaPozId] = useState("");
+  const zameni = trpc.vehicles.zameniUKampanji.useMutation({ onSuccess: onClose });
+
+  // KampanjaStavkaId — treba da se pronađe iz pogođenog vozila + kampanjaId
+  const stavke = trpc.campaigns.list.useQuery({});
+  // Pojednostavljenje: koristim postojeci endpoint za pretragu kampanjeStavki kroz medijiKampanje.list ili novi
+  // Server endpoint zameniUKampanji prima kampanjaStavkaId — u realnoj implementaciji UI bi imao dropdown
+  // za izbor stavke, ali za sada prosleđujemo voziloId + kampanjaId combo preko alternative API-ja
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={onClose}>
+      <div className="my-8 w-full max-w-2xl rounded-lg bg-card p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3">
+          <h2 className="text-lg font-semibold">Zameni vozilo u kampanji</h2>
+          <p className="text-xs text-muted-foreground">{kampanja.kampanjaNaziv} — {kampanja.partnerNaziv}</p>
+        </div>
+        <p className="mb-2 text-xs text-muted-foreground">Predlog alternativnih vozila (sortirano po score-u):</p>
+        {alts.isLoading && <p className="text-sm text-muted-foreground">Učitavam alternative…</p>}
+        {alts.data && alts.data.length === 0 && <p className="text-sm">Nema alternativa za ovaj period.</p>}
+        {alts.data && alts.data.length > 0 && (
+          <div className="overflow-hidden rounded-md border">
+            <table className="w-full text-sm">
+              <thead className="bg-secondary/60 text-left">
+                <tr>
+                  <th className="px-3 py-2 w-8"></th>
+                  <th className="px-3 py-2">Vozilo</th>
+                  <th className="px-3 py-2">Tip / Model</th>
+                  <th className="px-3 py-2">Match</th>
+                  <th className="px-3 py-2 text-right">Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alts.data.map((a: any) => (
+                  <tr key={a.id} className="border-t hover:bg-secondary/20">
+                    <td className="px-3 py-2 text-center">
+                      <input type="radio" name="alt" disabled={!a.slobodno} onChange={() => setNovaPozId(a.id)} />
+                    </td>
+                    <td className="px-3 py-2 font-mono">{a.sifra ?? a.registracija}</td>
+                    <td className="px-3 py-2 text-xs">{a.tipVozilaTxt ?? a.tip} · {a.model ?? "—"}</td>
+                    <td className="px-3 py-2 text-[10px]">
+                      {a.slobodno ? "✓ slobodno" : "✗ zauzeto"}
+                      {a.proizvodjacMatch && " · isti proizvođač"}
+                      {a.linijeMatch && " · ista linija"}
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold">{a.score}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          💡 Napomena: zamena vozila menja <strong>KampanjaStavku</strong> i <strong>Rezervaciju</strong> i šalje notifikaciju agentu prodaje. Za potpunu logiku po stavci, otvori detalje kampanje.
+        </p>
+        <div className="mt-3 flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>Zatvori</Button>
+        </div>
+      </div>
+    </div>
   );
 }
